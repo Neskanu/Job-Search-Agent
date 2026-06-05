@@ -118,11 +118,17 @@ async def upload_cv(file: UploadFile = File(...)):
 @app.post("/api/search-jobs", summary="Browse LinkedIn jobs")
 async def search_jobs(request: SearchRequest):
     """
-    Search LinkedIn jobs asynchronously using Playwright.
+    Search LinkedIn jobs synchronously in a background thread.
+    FastAPI / Python Learning Point:
+    Since 'search_linkedin_jobs' is a blocking synchronous function (it spawns and joins a thread
+    internally), we cannot await it directly (which raises TypeError) and we shouldn't run it
+    synchronously in an 'async def' path (which blocks the entire server's event loop).
+    Instead, we wrap the call in 'asyncio.to_thread(...)', which offloads it to a system thread pool
+    and yields control back to the event loop while it runs.
     """
     try:
-        # Await the asynchronous scraping function directly
-        jobs = await search_linkedin_jobs(
+        jobs = await asyncio.to_thread(
+            search_linkedin_jobs,
             keywords=request.keywords,
             location=request.location,
             limit=request.limit,
@@ -136,11 +142,18 @@ async def search_jobs(request: SearchRequest):
 @app.post("/api/scrape-job", summary="Scrape job details")
 async def scrape_job(request: ScrapeRequest):
     """
-    Scrape job title, company, and description from a specific LinkedIn job URL.
+    Scrape job details synchronously in a background thread.
+    FastAPI / Python Learning Point:
+    Like the search endpoint, 'scrape_job_details' is synchronous. We offload it to
+    'asyncio.to_thread' to run it in a worker thread pool so other clients can continue
+    making API requests concurrently.
     """
     try:
-        # Await the asynchronous scraping function directly
-        data = await scrape_job_details(request.url, request.li_at_cookie)
+        data = await asyncio.to_thread(
+            scrape_job_details,
+            request.url,
+            request.li_at_cookie
+        )
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to scrape job details: {str(e)}")

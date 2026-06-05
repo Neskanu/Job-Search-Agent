@@ -1,14 +1,15 @@
 import time
 import urllib.parse
 from typing import List, Dict, Any, Optional
-# Import the asynchronous Playwright API
-from playwright.async_api import async_playwright
+# We use the synchronous Playwright API inside our thread wrapper
+from playwright.sync_api import sync_playwright
+
+import sys
+import threading
+from queue import Queue
 
 def prepare_cookies(li_at_value: str) -> List[Dict[str, Any]]:
-    """
-    Prepare LinkedIn session cookies for injection.
-    This remains synchronous as it's a simple dictionary manipulation.
-    """
+    """Convert raw li_at cookie string to Playwright format."""
     if not li_at_value:
         return []
     return [
@@ -24,14 +25,50 @@ def prepare_cookies(li_at_value: str) -> List[Dict[str, Any]]:
         }
     ]
 
-# FastAPI Concept: Asynchronous functions ('async def') allow the server to pause 
-# execution of this task while waiting for network/browser I/O, freeing up the thread 
-# to handle other client requests in the meantime.
-async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Dict[str, Any]:
+# Learning Comment: On Windows, web servers like Uvicorn use the SelectorEventLoop
+# which does not support running subprocesses (which Playwright needs to control Chromium).
+# To bypass this restriction, we run Playwright inside a separate background thread 
+# and explicitly set the loop policy to ProactorEventLoop policy for that thread only.
+def _run_in_thread(func, *args, **kwargs):
     """
-    Asynchronously scrape job details from a specific LinkedIn job URL.
+    Run a scraping function in a new thread with a ProactorEventLoop.
+    """
+    q = Queue()
+    
+    def wrapper():
+        if sys.platform == 'win32':
+            import asyncio
+            try:
+                # Force Windows Proactor loop policy for this thread
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            except Exception:
+                pass
+        try:
+            res = func(*args, **kwargs)
+            q.put((True, res))
+        except Exception as e:
+            import traceback
+            q.put((False, (e, traceback.format_exc())))
+            
+    t = threading.Thread(target=wrapper)
+    t.start()
+    t.join()
+    
+    success, val = q.get()
+    if success:
+        return val
+    else:
+        exc, tb = val
+        raise RuntimeError(f"Error in scraper thread: {exc}\n{tb}")
+
+def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Scrape job details from a specific LinkedIn job URL.
     Optionally logs in using the li_at cookie to view full descriptions.
     """
+    return _run_in_thread(_scrape_job_details_inner, url, li_at_cookie)
+
+def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> Dict[str, Any]:
     # Normalize URL (clean up tracking query parameters)
     parsed_url = urllib.parse.urlparse(url)
     clean_url = f"https://www.linkedin.com{parsed_url.path}"
@@ -51,30 +88,24 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
         "error": None
     }
     
-    # We use 'async with' to manage the Playwright context asynchronously
-    async with async_playwright() as p:
-        # Launch browser headlessly
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         
         if li_at_cookie:
-            await context.add_cookies(prepare_cookies(li_at_cookie))
+            context.add_cookies(prepare_cookies(li_at_cookie))
             
-        page = await context.new_page()
+        page = context.new_page()
         
         try:
-            # Set default timeout to 15 seconds (15000ms)
             page.set_default_timeout(15000)
-            await page.goto(clean_url)
+            page.goto(clean_url)
+            page.wait_for_load_state("domcontentloaded")
             
-            # Wait for content to load
-            await page.wait_for_load_state("domcontentloaded")
-            
-            # If logged in, wait briefly for dynamic segments to load
             if li_at_cookie:
-                await page.wait_for_timeout(2000)
+                page.wait_for_timeout(2000)
                 
             # Extract Job Title
             title_selectors = [
@@ -86,8 +117,8 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             ]
             for selector in title_selectors:
                 el = page.locator(selector).first
-                if await el.is_visible():
-                    result["title"] = (await el.inner_text()).strip()
+                if el.is_visible():
+                    result["title"] = el.inner_text().strip()
                     break
                     
             # Extract Company Name
@@ -100,8 +131,8 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             ]
             for selector in company_selectors:
                 el = page.locator(selector).first
-                if await el.is_visible():
-                    result["company"] = (await el.inner_text()).strip()
+                if el.is_visible():
+                    result["company"] = el.inner_text().strip()
                     break
                     
             # Extract Location
@@ -113,8 +144,8 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             ]
             for selector in location_selectors:
                 el = page.locator(selector).first
-                if await el.is_visible():
-                    text = (await el.inner_text()).strip()
+                if el.is_visible():
+                    text = el.inner_text().strip()
                     if "·" in text:
                         parts = [p.strip() for p in text.split("·")]
                         result["location"] = parts[1] if len(parts) > 1 else text
@@ -125,14 +156,13 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             # Dismiss blocking overlays/authwalls
             try:
                 dismiss_btn = page.locator("button.modal__dismiss, button[aria-label='Dismiss'], button.contextual-sign-in-modal__modal-dismiss-btn").first
-                if await dismiss_btn.is_visible():
-                    await dismiss_btn.click(timeout=2000)
+                if dismiss_btn.is_visible():
+                    dismiss_btn.click(timeout=2000)
             except Exception:
                 pass
 
             try:
-                # Remove auth banners and overlays via JS execution
-                await page.evaluate("""
+                page.evaluate("""
                     document.querySelectorAll('.modal, .modal__overlay, .contextual-sign-in-modal, .authwall-modal, .top-level-modal-container').forEach(el => el.remove());
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = 'auto';
@@ -144,12 +174,12 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             # Expand description
             try:
                 show_more_button = page.locator("button.show-more-less-html__button--more").first
-                if await show_more_button.is_visible():
+                if show_more_button.is_visible():
                     try:
-                        await show_more_button.click(timeout=3000)
+                        show_more_button.click(timeout=3000)
                     except Exception:
-                        await show_more_button.click(force=True, timeout=2000)
-                    await page.wait_for_timeout(500)
+                        show_more_button.click(force=True, timeout=2000)
+                    page.wait_for_timeout(500)
             except Exception:
                 pass
                 
@@ -162,13 +192,12 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
             ]
             for selector in description_selectors:
                 el = page.locator(selector).first
-                if await el.is_visible():
-                    result["description"] = (await el.inner_text()).strip()
+                if el.is_visible():
+                    result["description"] = el.inner_text().strip()
                     break
             
-            # Text fallback if selectors fail
             if not result["description"]:
-                body_text = await page.locator("body").inner_text()
+                body_text = page.locator("body").inner_text()
                 if "Description" in body_text:
                     parts = body_text.split("Description", 1)
                     result["description"] = parts[1][:4000].strip()
@@ -181,14 +210,17 @@ async def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Di
         except Exception as e:
             result["error"] = str(e)
         finally:
-            await browser.close()
+            browser.close()
             
     return result
 
-async def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li_at_cookie: Optional[str] = None) -> List[Dict[str, Any]]:
+def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li_at_cookie: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Asynchronously search for jobs on LinkedIn based on keywords and location.
+    Search for jobs on LinkedIn based on keywords and location.
     """
+    return _run_in_thread(_search_linkedin_jobs_inner, keywords, location, limit, li_at_cookie)
+
+def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, li_at_cookie: Optional[str] = None) -> List[Dict[str, Any]]:
     jobs = []
     
     # URL encode parameters
@@ -200,62 +232,58 @@ async def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li
     else:
         url = f"https://www.linkedin.com/jobs/search?keywords={kw_encoded}&location={loc_encoded}"
         
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         
         if li_at_cookie:
-            await context.add_cookies(prepare_cookies(li_at_cookie))
+            context.add_cookies(prepare_cookies(li_at_cookie))
             
-        page = await context.new_page()
+        page = context.new_page()
         page.set_default_timeout(20000)
         
         try:
-            await page.goto(url)
-            await page.wait_for_load_state("domcontentloaded")
-            await page.wait_for_timeout(3000)
+            page.goto(url)
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(3000)
             
-            # Scroll down to trigger listing loads
             for _ in range(3):
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(1000)
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(1000)
                 
-            # Scrape listings (authenticated route)
             if li_at_cookie:
                 card_selectors = [
                     ".scaffold-layout__list-item",
                     ".job-card-container",
                     ".jobs-search-results-list__list-item"
                 ]
-                cards = None
+                cards = []
                 for sel in card_selectors:
                     found = page.locator(sel)
-                    if await found.count() > 0:
+                    if found.count() > 0:
                         cards = found
                         break
                         
-                card_count = await cards.count() if cards else 0
-                count = min(card_count, limit)
+                count = min(cards.count() if cards else 0, limit)
                 for i in range(count):
                     try:
                         card = cards.nth(i)
                         
                         # Get title
                         title_el = card.locator(".job-card-list__title").first
-                        if not await title_el.is_visible():
+                        if not title_el.is_visible():
                             title_el = card.locator("a[class*='job-card']").first
                             
-                        title = (await title_el.inner_text()).strip() if await title_el.is_visible() else "Unknown Title"
+                        title = title_el.inner_text().strip() if title_el.is_visible() else "Unknown Title"
                         
                         # Get URL link
                         href = ""
-                        links = card.locator("a")
-                        links_count = await links.count()
-                        for j in range(links_count):
-                            temp_el = links.nth(j)
-                            href_val = await temp_el.get_attribute("href")
+                        link_el = card.locator("a").first
+                        for j in range(card.locator("a").count()):
+                            temp_el = card.locator("a").nth(j)
+                            href_val = temp_el.get_attribute("href")
                             if href_val and "/jobs/view/" in href_val:
                                 href = href_val
                                 break
@@ -269,13 +297,13 @@ async def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li
                             
                         # Get company
                         company_el = card.locator(".job-card-container__primary-description").first
-                        if not await company_el.is_visible():
+                        if not company_el.is_visible():
                             company_el = card.locator(".job-card-container__company-name").first
-                        company = (await company_el.inner_text()).strip() if await company_el.is_visible() else "Unknown Company"
+                        company = company_el.inner_text().strip() if company_el.is_visible() else "Unknown Company"
                         
                         # Get location
                         loc_el = card.locator(".job-card-container__metadata-item").first
-                        loc = (await loc_el.inner_text()).strip() if await loc_el.is_visible() else "Unknown Location"
+                        loc = loc_el.inner_text().strip() if loc_el.is_visible() else "Unknown Location"
                         
                         if href:
                             jobs.append({
@@ -286,39 +314,37 @@ async def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li
                             })
                     except Exception:
                         continue
-            # Scrape listings (public route)
             else:
                 card_selectors = [
                     ".base-card",
                     ".base-search-card",
                     ".jobs-search__results-list li"
                 ]
-                cards = None
+                cards = []
                 for sel in card_selectors:
                     found = page.locator(sel)
-                    if await found.count() > 0:
+                    if found.count() > 0:
                         cards = found
                         break
                         
-                card_count = await cards.count() if cards else 0
-                count = min(card_count, limit)
+                count = min(cards.count() if cards else 0, limit)
                 for i in range(count):
                     try:
                         card = cards.nth(i)
                         
                         title_el = card.locator(".base-search-card__title").first
-                        title = (await title_el.inner_text()).strip() if await title_el.is_visible() else "Unknown Title"
+                        title = title_el.inner_text().strip() if title_el.is_visible() else "Unknown Title"
                         
                         company_el = card.locator(".base-search-card__subtitle").first
-                        company = (await company_el.inner_text()).strip() if await company_el.is_visible() else "Unknown Company"
+                        company = company_el.inner_text().strip() if company_el.is_visible() else "Unknown Company"
                         
                         loc_el = card.locator(".job-search-card__location").first
-                        loc = (await loc_el.inner_text()).strip() if await loc_el.is_visible() else "Unknown Location"
+                        loc = loc_el.inner_text().strip() if loc_el.is_visible() else "Unknown Location"
                         
                         link_el = card.locator("a.base-card__full-link").first
-                        if not await link_el.is_visible():
+                        if not link_el.is_visible():
                             link_el = card.locator("a").first
-                        href = await link_el.get_attribute("href") if await link_el.is_visible() else ""
+                        href = link_el.get_attribute("href") if link_el.is_visible() else ""
                         
                         if href:
                             parsed = urllib.parse.urlparse(href)
@@ -336,6 +362,6 @@ async def search_linkedin_jobs(keywords: str, location: str, limit: int = 10, li
         except Exception:
             pass
         finally:
-            await browser.close()
+            browser.close()
             
     return jobs
