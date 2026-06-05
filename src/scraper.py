@@ -12,10 +12,14 @@ def prepare_cookies(li_at_value: str) -> List[Dict[str, Any]]:
     """Convert raw li_at cookie string to Playwright format."""
     if not li_at_value:
         return []
+    cleaned_val = li_at_value.strip()
+    # If the frontend passes "null", "undefined", or similar placeholders, treat it as no cookie
+    if cleaned_val.lower() in ["", "none", "null", "undefined"]:
+        return []
     return [
         {
             "name": "li_at",
-            "value": li_at_value.strip(),
+            "value": cleaned_val,
             "domain": ".linkedin.com",
             "path": "/",
             "expires": time.time() + 3600 * 24 * 30, # 30 days
@@ -89,7 +93,10 @@ def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> D
     }
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
@@ -233,7 +240,10 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
         url = f"https://www.linkedin.com/jobs/search?keywords={kw_encoded}&location={loc_encoded}"
         
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
