@@ -1,0 +1,14 @@
+llm:
+  gemini:
+    model: gemini-2.5-flash
+  ollama:
+    api_url: http://localhost:11434
+    model: llama3
+  provider: gemini
+paths:
+  original_cv_dir: data/original_cv
+  tailored_cv_dir: data/tailored_cvs
+search_criteria:
+  keywords: Python Developer
+  limit: 10
+  location: United States

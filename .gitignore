@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+venv/
+ENV/
+
+# Streamlit configurations
+.streamlit/
+
+# Local data
+data/original_cv/*
+!data/original_cv/.gitkeep
+data/tailored_cvs/*
+!data/tailored_cvs/.gitkeep
+config/local_settings.yaml
