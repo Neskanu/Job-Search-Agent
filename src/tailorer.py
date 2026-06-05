@@ -2,22 +2,15 @@ import os
 import json
 import re
 from typing import Dict, Any, Optional
-import requests
+import httpx
 
-# Gemini import
+# Gemini imports
 try:
     from google import genai
     from google.genai import types
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-
-# Ollama import
-try:
-    import ollama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
 
 SYSTEM_PROMPT = """
 You are an expert ATS (Applicant Tracking System) optimization assistant and resume writer. 
@@ -103,7 +96,6 @@ def parse_llm_json(response_text: str) -> Dict[str, Any]:
     try:
         return json.loads(clean_text)
     except json.JSONDecodeError as e:
-        # Fallback regex search to find the first '{' and last '}'
         match = re.search(r'\{.*\}', clean_text, re.DOTALL)
         if match:
             try:
@@ -112,7 +104,10 @@ def parse_llm_json(response_text: str) -> Dict[str, Any]:
                 pass
         raise ValueError(f"Failed to parse LLM response as JSON. Raw response: {response_text}\nError: {e}")
 
-def tailor_cv_gemini(
+# FastAPI / Async Concept: We mark these functions as 'async def' because querying an 
+# external LLM API is a network-bound task. By using 'await' during the network call, 
+# the server thread can suspend this function and handle other operations until the API responds.
+async def tailor_cv_gemini(
     original_cv_text: str, 
     job_description_text: str, 
     job_title: str, 
@@ -121,16 +116,19 @@ def tailor_cv_gemini(
     model_name: str = "gemini-2.5-flash",
     additional_info: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Use Google Gemini API to tailor the CV."""
+    """
+    Asynchronously use Google Gemini API to tailor the CV.
+    Uses Gemini's asynchronous client ('client.aio') to avoid blocking.
+    """
     if not GEMINI_AVAILABLE:
         raise ImportError("google-genai package is not installed.")
         
     client = genai.Client(api_key=api_key)
-    
     user_prompt = build_user_prompt(original_cv_text, job_description_text, job_title, company, additional_info)
     
     try:
-        response = client.models.generate_content(
+        # We call client.aio instead of client.models to utilize the async client
+        response = await client.aio.models.generate_content(
             model=model_name,
             contents=[SYSTEM_PROMPT, user_prompt],
             config=types.GenerateContentConfig(
@@ -141,7 +139,7 @@ def tailor_cv_gemini(
     except Exception as e:
         raise RuntimeError(f"Gemini API Error: {str(e)}")
 
-def tailor_cv_ollama(
+async def tailor_cv_ollama(
     original_cv_text: str, 
     job_description_text: str, 
     job_title: str, 
@@ -150,29 +148,12 @@ def tailor_cv_ollama(
     model_name: str = "llama3",
     additional_info: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Use local Ollama instance to tailor the CV."""
+    """
+    Asynchronously use local Ollama instance to tailor the CV.
+    Uses httpx.AsyncClient for non-blocking HTTP requests.
+    """
     user_prompt = build_user_prompt(original_cv_text, job_description_text, job_title, company, additional_info)
     
-    if OLLAMA_AVAILABLE:
-        try:
-            client = ollama.Client(host=api_url)
-            # Ollama chat mode
-            response = client.chat(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                options={"temperature": 0.2},
-                format="json"
-            )
-            content = response['message']['content']
-            return parse_llm_json(content)
-        except Exception as e:
-            # Fall back to raw API requests in case of SDK issues
-            pass
-            
-    # Direct HTTP requests fallback
     payload = {
         "model": model_name,
         "messages": [
@@ -185,15 +166,17 @@ def tailor_cv_ollama(
     }
     
     try:
-        res = requests.post(f"{api_url}/api/chat", json=payload, timeout=120)
-        res.raise_for_status()
-        data = res.json()
-        content = data["message"]["content"]
-        return parse_llm_json(content)
+        # We use httpx.AsyncClient() as an async context manager for non-blocking post requests
+        async with httpx.AsyncClient() as client:
+            res = await client.post(f"{api_url}/api/chat", json=payload, timeout=120.0)
+            res.raise_for_status()
+            data = res.json()
+            content = data["message"]["content"]
+            return parse_llm_json(content)
     except Exception as e:
         raise RuntimeError(f"Ollama Error (Make sure Ollama is running and model '{model_name}' is pulled): {str(e)}")
 
-def tailor_cv(
+async def tailor_cv(
     original_cv_text: str,
     job_description_text: str,
     job_title: str,
@@ -202,16 +185,20 @@ def tailor_cv(
     config: Dict[str, Any],
     additional_info: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Wrapper function to direct to either Gemini or Ollama based on user choice."""
+    """
+    Async wrapper function to direct to either Gemini or Ollama based on user choice.
+    """
     if provider == "gemini":
         api_key = config.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY is not set. Please provide it in your settings, UI, or environment.")
+            raise ValueError("GEMINI_API_KEY is not set. Please configure it in your settings or dashboard.")
         model = config.get("gemini_model", "gemini-2.5-flash")
-        return tailor_cv_gemini(original_cv_text, job_description_text, job_title, company, api_key, model, additional_info)
+        # Await the async gemini handler
+        return await tailor_cv_gemini(original_cv_text, job_description_text, job_title, company, api_key, model, additional_info)
     elif provider == "ollama":
         api_url = config.get("ollama_url", "http://localhost:11434")
         model = config.get("ollama_model", "llama3")
-        return tailor_cv_ollama(original_cv_text, job_description_text, job_title, company, api_url, model, additional_info)
+        # Await the async ollama handler
+        return await tailor_cv_ollama(original_cv_text, job_description_text, job_title, company, api_url, model, additional_info)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")

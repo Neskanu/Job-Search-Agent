@@ -1,0 +1,118 @@
+/* ==========================================================================
+   🎨 GLOBAL & CONSOLE SIDEBAR STYLES
+   ========================================================================== */
+
+/* Custom Font Family */
+html, body {
+  font-family: 'Outfit', sans-serif;
+  height: 100%;
+}
+
+/* Custom Webkit Scrollbars for Sidebars and Lists */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Config panel elements overrides */
+select, input, textarea {
+  transition: all 0.2s ease;
+}
+
+/* ==========================================================================
+   📄 WYSIWYG RESUME CANVAS STYLE ACCENTS
+   ========================================================================== */
+
+/* Draggable Resume Sections */
+.draggable-section {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-left: -12px;
+  margin-right: -12px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.draggable-section:hover {
+  border-color: #E2E8F0;
+  background-color: #F8FAFC;
+}
+
+/* Drag Handle */
+.drag-handle {
+  display: none;
+  position: absolute;
+  left: -20px;
+  top: 12px;
+  cursor: grab;
+  color: #94A3B8;
+  font-size: 15px;
+  padding: 4px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.draggable-section:hover .drag-handle {
+  display: block;
+}
+
+/* Contenteditable box focus borders */
+[contenteditable="true"] {
+  transition: background-color 0.15s ease, outline 0.15s ease;
+}
+
+[contenteditable="true"]:focus {
+  outline: 2px solid #E94057 !important;
+  background-color: #F8FAFC !important;
+  border-radius: 4px;
+  padding: 1px 3px;
+}
+
+/* Drag and Drop Ghost Class (Placeholder while dragging) */
+.ghost-class {
+  opacity: 0.35;
+  background-color: #F1F5F9 !important;
+  border: 2px dashed #94A3B8 !important;
+}
+
+/* ==========================================================================
+   ✨ UTILITIES & ANIMATIONS
+   ========================================================================== */
+
+/* Fade Animation for tab content loading */
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Item block indicators */
+.item-block {
+  transition: border-color 0.2s ease;
+}
+
+.item-block:hover {
+  border-color: #CBD5E1;
+}
