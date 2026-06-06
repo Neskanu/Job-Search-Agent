@@ -138,6 +138,7 @@ select, input, textarea {
     #E2E8F0 880px
   ) !important;
   background-size: 100% 880px !important;
+  background-repeat: repeat-y !important;
   border-top: none !important;
   border-bottom: none !important;
   border-left: 1px solid #E2E8F0 !important;
@@ -167,6 +168,14 @@ select, input, textarea {
 /* 🎨 THEME 1: Minimalist Classic (Default CSS rules inherited mostly) */
 .theme-minimalist {
   font-family: 'Outfit', sans-serif !important;
+}
+.theme-minimalist #cv-header-container {
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+.theme-minimalist #cv-header-text {
+  text-align: center !important;
 }
 
 /* 🎨 THEME 2: Modern Executive (Navy / Left-Border accent) */
@@ -200,7 +209,7 @@ select, input, textarea {
   padding-right: 0 !important;
   border-radius: 12px !important;
 }
-.theme-creative .text-center.border-b {
+.theme-creative #cv-header-container {
   background: linear-gradient(135deg, #0F766E 0%, #0D9488 100%) !important;
   padding: 3rem 2.5rem !important;
   margin-bottom: 2rem !important;
@@ -251,6 +260,14 @@ select, input, textarea {
 /* 🎨 THEME 5: Traditional Serif (Academic) */
 .theme-academic {
   font-family: Georgia, 'Times New Roman', serif !important;
+}
+.theme-academic #cv-header-container {
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+.theme-academic #cv-header-text {
+  text-align: center !important;
 }
 .theme-academic #cv-name {
   font-family: Georgia, serif !important;

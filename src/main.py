@@ -218,7 +218,10 @@ async def generate_docs(request: GenerateDocsRequest):
 
 
 @app.get("/api/download", summary="Download file response")
-async def download_file(path: str = Query(..., description="Absolute path to the generated file")):
+async def download_file(
+    path: str = Query(..., description="Absolute path to the generated file"),
+    t: Optional[str] = None
+):
     """
     Serves the compiled PDF or Word file as a file download.
     Implements security bounds checks to avoid directory traversal.

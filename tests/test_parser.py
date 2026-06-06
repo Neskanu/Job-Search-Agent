@@ -62,18 +62,21 @@ def test_sanitize_filename():
     assert sanitize_filename("John | Smith: CV") == "John___Smith__CV"
 
 def test_docx_pdf_generation(tmp_path):
-    """Verify that docx and pdf files are created without exceptions and exist."""
-    docx_file = os.path.join(tmp_path, "test_cv.docx")
-    pdf_file = os.path.join(tmp_path, "test_cv.pdf")
+    """Verify that docx and pdf files are created without exceptions and exist across all themes."""
+    themes = ["minimalist", "executive", "creative", "tech", "academic"]
     
-    # Run saving routines
-    save_cv_as_docx(DUMMY_CV, docx_file)
-    save_cv_as_pdf(DUMMY_CV, pdf_file)
-    
-    # Assert existence
-    assert os.path.exists(docx_file)
-    assert os.path.exists(pdf_file)
-    
-    # Assert size is larger than 0 bytes
-    assert os.path.getsize(docx_file) > 0
-    assert os.path.getsize(pdf_file) > 0
+    for theme in themes:
+        docx_file = os.path.join(tmp_path, f"test_cv_{theme}.docx")
+        pdf_file = os.path.join(tmp_path, f"test_cv_{theme}.pdf")
+        
+        # Run saving routines
+        save_cv_as_docx(DUMMY_CV, docx_file, theme=theme)
+        save_cv_as_pdf(DUMMY_CV, pdf_file, theme=theme)
+        
+        # Assert existence
+        assert os.path.exists(docx_file)
+        assert os.path.exists(pdf_file)
+        
+        # Assert size is larger than 0 bytes
+        assert os.path.getsize(docx_file) > 0
+        assert os.path.getsize(pdf_file) > 0

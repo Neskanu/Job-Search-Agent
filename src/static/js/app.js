@@ -11,7 +11,8 @@ const cvState = {
   tailoredCvData: null,
   tailoredDocxPath: null,
   tailoredPdfPath: null,
-  theme: "minimalist"
+  theme: "minimalist",
+  photo: null
 };
 
 // ==========================================
@@ -323,6 +324,7 @@ async function tailorResume() {
     document.getElementById("cv-empty-placeholder").classList.add("hidden");
 
     showToast("CV tailored successfully! PDF/Word files generated.");
+    refreshPDFPreview();
   } catch (err) {
     alert(`Tailoring Error: ${err.message}`);
   } finally {
@@ -349,6 +351,21 @@ function renderWYSIWYG(cvData) {
     const selectedTheme = document.getElementById("cv-theme-select").value || "minimalist";
     sheet.classList.add(`theme-${selectedTheme}`);
     cvState.theme = selectedTheme;
+  }
+
+  // Set photo if available
+  const photoImg = document.getElementById("cv-photo");
+  const removeBtn = document.getElementById("btn-remove-photo");
+  if (photoImg) {
+    if (cvData.photo) {
+      photoImg.src = cvData.photo;
+      cvState.photo = cvData.photo;
+      if (removeBtn) removeBtn.classList.remove("hidden");
+    } else {
+      photoImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>";
+      cvState.photo = null;
+      if (removeBtn) removeBtn.classList.add("hidden");
+    }
   }
 
   // Set Name
@@ -415,21 +432,32 @@ function renderWYSIWYG(cvData) {
                 </div>
                 ${bulletsHTML}
                 
-                <!-- Inner Actions inside Experence Item -->
-                <div class="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                  <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-medium hover:underline">+ Add Bullet</button>
-                  <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-medium hover:underline">🗑️ Delete Block</button>
+                <!-- Inner Actions inside Experience Item -->
+                <div class="flex gap-3 mt-1.5">
+                  <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
+                  <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
                 </div>
               </div>`;
           });
         }
         contentHTML += `</div>`;
+        
+        // Append "+ Add Block" button for list blocks (always visible)
+        contentHTML += `
+          <div class="mt-3 flex gap-2">
+            <button onclick="addBlockItem(this, '${sec.type}')" class="inline-flex items-center gap-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-all hover:scale-105 active:scale-95">
+              ➕ Add ${sec.type === 'experience' ? 'Job Position' : 'Education Item'}
+            </button>
+          </div>`;
       }
 
-      // Build section wrapper HTML containing sortable handles
+      // Build section wrapper HTML containing sortable handles and Delete Section button (always visible)
       secEl.innerHTML = `
         <div class="drag-handle">☰</div>
-        <h2 contenteditable="true" class="sec-title text-sm font-bold text-slate-900 border-b border-slate-100 pb-1 mb-2 tracking-wide uppercase outline-none">${sec.title || "Section"}</h2>
+        <div class="flex justify-between items-center border-b border-slate-100 pb-1 mb-2">
+          <h2 contenteditable="true" class="sec-title text-sm font-bold text-slate-900 tracking-wide uppercase outline-none">${sec.title || "Section"}</h2>
+          <button onclick="deleteSection(this)" class="text-[10px] text-red-500 font-semibold hover:underline transition-opacity">Delete Section 🗑️</button>
+        </div>
         ${contentHTML}
       `;
       listContainer.appendChild(secEl);
@@ -481,15 +509,18 @@ function addBullet(btn) {
     <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
   `;
   ul.appendChild(li);
+  saveAndCompile();
 }
 
 function deleteBullet(btn) {
   btn.closest('li').remove();
+  saveAndCompile();
 }
 
 function deleteItemBlock(btn) {
   if (confirm("Are you sure you want to delete this block item?")) {
     btn.closest('.item-block').remove();
+    saveAndCompile();
   }
 }
 
@@ -557,6 +588,7 @@ async function saveAndCompile() {
   const updatedCv = {
     name: name,
     contact_info: contact_info,
+    photo: cvState.photo || null,
     sections: sections
   };
 
@@ -584,6 +616,7 @@ async function saveAndCompile() {
     cvState.tailoredPdfPath = data.pdf_path;
 
     showToast("Rebuilt Word & PDF outputs successfully!");
+    refreshPDFPreview();
   } catch (err) {
     alert(`Save Error: ${err.message}`);
   }
@@ -604,3 +637,207 @@ function downloadFormat(format) {
   // Open download link
   window.open(`/api/download?path=${encodeURIComponent(path)}`, '_blank');
 }
+
+/**
+ * Upload CV profile image file, convert it to Base64, and sync.
+ */
+function uploadCVPhoto() {
+  const input = document.getElementById("cv-photo-input");
+  if (!input || input.files.length === 0) return;
+  
+  const file = input.files[0];
+  const reader = new FileReader();
+  
+  reader.onload = function(e) {
+    const base64Img = e.target.result;
+    document.getElementById("cv-photo").src = base64Img;
+    cvState.photo = base64Img;
+    
+    // Toggle remove button visibility
+    const removeBtn = document.getElementById("btn-remove-photo");
+    if (removeBtn) {
+      removeBtn.classList.remove("hidden");
+    }
+    
+    if (cvState.tailoredCvData) {
+      saveAndCompile();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Remove the CV profile photo, resetting to image placeholder.
+ */
+function removeCVPhoto(event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  
+  if (confirm("Are you sure you want to remove the profile photo?")) {
+    cvState.photo = null;
+    const photoImg = document.getElementById("cv-photo");
+    if (photoImg) {
+      photoImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>";
+    }
+    const removeBtn = document.getElementById("btn-remove-photo");
+    if (removeBtn) {
+      removeBtn.classList.add("hidden");
+    }
+    
+    if (cvState.tailoredCvData) {
+      saveAndCompile();
+    }
+  }
+}
+
+/**
+ * Add a new experience / education block item under a section.
+ */
+function addBlockItem(btn, type) {
+  const contentDiv = btn.closest('.draggable-section').querySelector('.sec-content');
+  if (!contentDiv) return;
+  
+  const newItem = document.createElement("div");
+  newItem.className = "item-block border-l-2 border-slate-100 pl-3 relative group/item mt-4";
+  
+  const isExp = type === "experience";
+  const titleVal = isExp ? "Job Title / Role" : "Degree / Certificate";
+  const subTitleVal = isExp ? "Company Name" : "Institution Name";
+  
+  newItem.innerHTML = `
+    <div class="flex justify-between items-baseline">
+      <div class="text-sm font-semibold text-slate-800">
+        <span contenteditable="true" class="item-title outline-none">${titleVal}</span>
+        <span class="text-slate-400 font-normal"> at </span>
+        <span contenteditable="true" class="item-sub-title italic font-medium text-slate-700 outline-none">${subTitleVal}</span>
+      </div>
+      <div class="text-[11px] text-slate-400 font-medium text-right">
+        <span contenteditable="true" class="item-period outline-none">2024 - Present</span>
+        <span contenteditable="true" class="item-location outline-none"> | Location</span>
+      </div>
+    </div>
+    <ul class="list-disc pl-5 mt-1.5 space-y-1 text-xs text-slate-500 font-normal">
+      <li class="bullet-item relative group/bullet pr-8">
+        <span contenteditable="true" class="bullet-text block outline-none">Describe your impact or responsibilities.</span>
+        <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
+      </li>
+    </ul>
+    <div class="flex gap-3 mt-1.5">
+      <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
+      <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
+    </div>
+  `;
+  contentDiv.appendChild(newItem);
+  saveAndCompile();
+}
+
+/**
+ * Create a new dynamic text, list, experience, or education section.
+ */
+function addNewSection() {
+  const type = document.getElementById("new-section-type").value;
+  const titleMap = {
+    text: "New Text Section",
+    list: "New List Section",
+    experience: "Work Experience",
+    education: "Education"
+  };
+  
+  const newSec = {
+    title: titleMap[type],
+    type: type,
+    content: type === "text" ? "Enter details here." :
+             type === "list" ? ["Item 1", "Item 2"] : []
+  };
+  
+  if (!cvState.tailoredCvData) {
+    cvState.tailoredCvData = { name: "Your Name", contact_info: [], sections: [] };
+  }
+  if (!Array.isArray(cvState.tailoredCvData.sections)) {
+    cvState.tailoredCvData.sections = [];
+  }
+  
+  cvState.tailoredCvData.sections.push(newSec);
+  renderWYSIWYG(cvState.tailoredCvData);
+  saveAndCompile();
+}
+
+/**
+ * Delete a CV section.
+ */
+function deleteSection(btn) {
+  if (confirm("Are you sure you want to delete this entire section?")) {
+    btn.closest('.draggable-section').remove();
+    saveAndCompile();
+  }
+}
+
+/**
+ * Set the workspace layout view mode (edit, split, preview).
+ */
+function setViewMode(mode) {
+  const editor = document.getElementById("editor-container");
+  const preview = document.getElementById("preview-container");
+  const btnEdit = document.getElementById("btn-mode-edit");
+  const btnSplit = document.getElementById("btn-mode-split");
+  const btnPreview = document.getElementById("btn-mode-preview");
+  
+  if (!editor || !preview) return;
+  
+  // Update button active states
+  [btnEdit, btnSplit, btnPreview].forEach(btn => {
+    if (btn) {
+      btn.classList.remove("bg-white", "text-slate-800", "shadow-sm");
+      btn.classList.add("text-slate-600", "hover:text-slate-800");
+    }
+  });
+  
+  const activeBtn = document.getElementById(`btn-mode-${mode}`);
+  if (activeBtn) {
+    activeBtn.classList.remove("text-slate-600", "hover:text-slate-800");
+    activeBtn.classList.add("bg-white", "text-slate-800", "shadow-sm");
+  }
+  
+  if (mode === "edit") {
+    editor.classList.remove("hidden", "w-1/2");
+    editor.classList.add("flex-1");
+    preview.classList.add("hidden");
+  } 
+  else if (mode === "split") {
+    editor.classList.remove("hidden", "flex-1");
+    editor.classList.add("w-1/2");
+    preview.classList.remove("hidden", "w-1/2");
+    preview.classList.add("flex-1"); // Let it expand nicely
+    refreshPDFPreview();
+  } 
+  else if (mode === "preview") {
+    editor.classList.add("hidden");
+    preview.classList.remove("hidden", "w-1/2");
+    preview.classList.add("flex-1");
+    refreshPDFPreview();
+  }
+  
+  localStorage.setItem("cv_view_mode", mode);
+}
+
+/**
+ * Reload the Live PDF Preview iframe source using a cache-buster.
+ */
+function refreshPDFPreview() {
+  const iframe = document.getElementById("pdf-preview-iframe");
+  if (!iframe) return;
+  
+  if (cvState.tailoredPdfPath) {
+    iframe.src = `/api/download?path=${encodeURIComponent(cvState.tailoredPdfPath)}&t=${Date.now()}#toolbar=0&navpanes=0`;
+  } else {
+    iframe.src = "about:blank";
+  }
+}
+
+// Initialize default view mode on load
+document.addEventListener("DOMContentLoaded", () => {
+  const savedMode = localStorage.getItem("cv_view_mode") || "edit";
+  setViewMode(savedMode);
+});

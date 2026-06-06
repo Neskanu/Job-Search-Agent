@@ -133,28 +133,91 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
     font.name = font_name
     font.size = body_size
     
-    # Header: Name
-    name_p = doc.add_paragraph()
-    name_p.alignment = name_align
-    name_run = name_p.add_run(cv_data.get("name", "Your Name"))
-    name_run.font.name = heading_font_name
-    name_run.font.size = name_size
-    name_run.font.bold = True
-    name_run.font.color.rgb = name_color
-    
-    # Header: Contact Info
-    contact_p = doc.add_paragraph()
-    contact_p.alignment = contact_align
+    # 1. Header (Name, Contact, Photo)
+    photo_data = cv_data.get("photo")
+    image_buf = None
+    if photo_data and "," in photo_data:
+        try:
+            import base64
+            import io
+            header, encoded = photo_data.split(",", 1)
+            img_bytes = base64.b64decode(encoded)
+            image_buf = io.BytesIO(img_bytes)
+        except Exception as img_err:
+            print(f"Error parsing DOCX photo: {img_err}")
+
+    # Process contact info text
     contact_info = cv_data.get("contact_info", "")
     if isinstance(contact_info, list):
         contact_text = "  |  ".join(contact_info)
     else:
         contact_text = str(contact_info)
-    
-    contact_run = contact_p.add_run(contact_text)
-    contact_run.font.name = font_name
-    contact_run.font.size = meta_size
-    contact_run.font.italic = False
+
+    # Build Header Layout in Word
+    if theme in ["minimalist", "academic"]:
+        if image_buf:
+            photo_p = doc.add_paragraph()
+            photo_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = photo_p.add_run()
+            run.add_picture(image_buf, width=Inches(0.9), height=Inches(0.9))
+            
+        name_p = doc.add_paragraph()
+        name_p.alignment = name_align
+        name_run = name_p.add_run(cv_data.get("name", "Your Name"))
+        name_run.font.name = heading_font_name
+        name_run.font.size = name_size
+        name_run.font.bold = True
+        name_run.font.color.rgb = name_color
+        
+        contact_p = doc.add_paragraph()
+        contact_p.alignment = contact_align
+        contact_run = contact_p.add_run(contact_text)
+        contact_run.font.name = font_name
+        contact_run.font.size = meta_size
+        contact_run.font.italic = False
+    else:
+        # Left-aligned themes with 2-column table grid for photo next to text
+        if image_buf:
+            header_table = doc.add_table(rows=1, cols=2)
+            header_table.autofit = False
+            header_table.columns[0].width = Inches(1.2)
+            
+            cell_photo = header_table.cell(0, 0)
+            photo_p = cell_photo.paragraphs[0]
+            photo_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            run = photo_p.add_run()
+            run.add_picture(image_buf, width=Inches(0.9), height=Inches(0.9))
+            
+            cell_text = header_table.cell(0, 1)
+            name_p = cell_text.paragraphs[0]
+            name_p.alignment = name_align
+            name_run = name_p.add_run(cv_data.get("name", "Your Name"))
+            name_run.font.name = heading_font_name
+            name_run.font.size = name_size
+            name_run.font.bold = True
+            name_run.font.color.rgb = name_color
+            
+            contact_p = cell_text.add_paragraph()
+            contact_p.alignment = contact_align
+            contact_run = contact_p.add_run(contact_text)
+            contact_run.font.name = font_name
+            contact_run.font.size = meta_size
+            contact_run.font.italic = False
+        else:
+            name_p = doc.add_paragraph()
+            name_p.alignment = name_align
+            name_run = name_p.add_run(cv_data.get("name", "Your Name"))
+            name_run.font.name = heading_font_name
+            name_run.font.size = name_size
+            name_run.font.bold = True
+            name_run.font.color.rgb = name_color
+            
+            contact_p = doc.add_paragraph()
+            contact_p.alignment = contact_align
+            contact_run = contact_p.add_run(contact_text)
+            contact_run.font.name = font_name
+            contact_run.font.size = meta_size
+            contact_run.font.italic = False
     
     # Add spacing under header
     p_space = doc.add_paragraph()
@@ -477,16 +540,63 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
     
     story = []
     
-    # 1. Header (Name)
-    story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
-    
-    # 2. Contact Info
+    # 1. Header (Name, Contact, Photo)
+    photo_data = cv_data.get("photo")
+    image_flowable = None
+    if photo_data and "," in photo_data:
+        try:
+            import base64
+            import io
+            from reportlab.platypus import Image
+            header, encoded = photo_data.split(",", 1)
+            img_bytes = base64.b64decode(encoded)
+            img_buf = io.BytesIO(img_bytes)
+            image_flowable = Image(img_buf, width=65, height=65)
+            image_flowable.hAlign = 'CENTER'
+        except Exception as img_err:
+            print(f"Error parsing PDF photo: {img_err}")
+
+    # Process contact info text
     contact_info = cv_data.get("contact_info", "")
     if isinstance(contact_info, list):
         contact_text = "  |  ".join(contact_info)
     else:
         contact_text = str(contact_info)
-    story.append(Paragraph(contact_text, style_contact))
+
+    # Build Header Layout based on theme and photo
+    if theme in ["minimalist", "academic"]:
+        if image_flowable:
+            story.append(image_flowable)
+            story.append(Spacer(1, 6))
+        story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
+        story.append(Paragraph(contact_text, style_contact))
+    else:
+        if image_flowable:
+            from reportlab.platypus import Table, TableStyle
+            image_flowable.hAlign = 'LEFT'
+            
+            text_story = [
+                Paragraph(cv_data.get("name", "Your Name"), ParagraphStyle(
+                    'SubName', parent=style_name, alignment=TA_LEFT, spaceAfter=2
+                )),
+                Paragraph(contact_text, ParagraphStyle(
+                    'SubContact', parent=style_contact, alignment=TA_LEFT, spaceAfter=0
+                ))
+            ]
+            
+            header_table = Table([[image_flowable, text_story]], colWidths=[80, None])
+            header_table.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('LEFTPADDING', (0,0), (-1,-1), 0),
+                ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                ('TOPPADDING', (0,0), (-1,-1), 0),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ]))
+            story.append(header_table)
+            story.append(Spacer(1, 12))
+        else:
+            story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
+            story.append(Paragraph(contact_text, style_contact))
     
     # 3. Sections
     for sec in cv_data.get("sections", []):
