@@ -70,6 +70,7 @@ class GenerateDocsRequest(BaseModel):
     cv_data: Dict[str, Any] = Field(..., description="The fully updated JSON representation of the CV")
     job_title: str = Field(..., example="Python Developer")
     company: str = Field(..., example="Google")
+    theme: Optional[str] = Field(default="minimalist", description="CV layout style template theme")
 
 # ==========================================
 # 🛠️ API ENDPOINTS
@@ -203,9 +204,9 @@ async def generate_docs(request: GenerateDocsRequest):
         docx_path = os.path.join("data/tailored_cvs", f"{filename_base}.docx")
         pdf_path = os.path.join("data/tailored_cvs", f"{filename_base}.pdf")
         
-        # Save files on background threads to prevent event loop lag
-        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path)
-        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path)
+        # Save files on background threads to prevent event loop lag, passing selected theme layout
+        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path, request.theme)
+        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path, request.theme)
         
         return {
             "success": True,

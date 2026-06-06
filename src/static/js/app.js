@@ -10,7 +10,8 @@ const cvState = {
   selectedJob: null,
   tailoredCvData: null,
   tailoredDocxPath: null,
-  tailoredPdfPath: null
+  tailoredPdfPath: null,
+  theme: "minimalist"
 };
 
 // ==========================================
@@ -340,6 +341,19 @@ async function tailorResume() {
 function renderWYSIWYG(cvData) {
   if (!cvData) return;
 
+  // Sync style theme classes on resume-sheet
+  const sheet = document.getElementById("resume-sheet");
+  if (sheet) {
+    sheet.classList.forEach(cls => {
+      if (cls.startsWith("theme-")) {
+        sheet.classList.remove(cls);
+      }
+    });
+    const selectedTheme = document.getElementById("cv-theme-select").value || "minimalist";
+    sheet.classList.add(`theme-${selectedTheme}`);
+    cvState.theme = selectedTheme;
+  }
+
   // Set Name
   document.getElementById("cv-name").innerText = cvData.name || "Your Name";
 
@@ -431,6 +445,33 @@ function renderWYSIWYG(cvData) {
     ghostClass: 'ghost-class',
     animation: 180
   });
+}
+
+/**
+ * Change the layout style theme of the resume preview.
+ * Swaps CSS classes on the sheet wrapper and auto-saves the new layout.
+ */
+function changeCVTheme() {
+  const themeSelect = document.getElementById("cv-theme-select");
+  if (!themeSelect) return;
+  
+  const selectedTheme = themeSelect.value;
+  cvState.theme = selectedTheme;
+  
+  const sheet = document.getElementById("resume-sheet");
+  if (sheet) {
+    sheet.classList.forEach(cls => {
+      if (cls.startsWith("theme-")) {
+        sheet.classList.remove(cls);
+      }
+    });
+    sheet.classList.add(`theme-${selectedTheme}`);
+  }
+  
+  // Automatically trigger save and compile in the background
+  if (cvState.tailoredCvData) {
+    saveAndCompile();
+  }
 }
 
 // ==========================================
@@ -535,7 +576,8 @@ async function saveAndCompile() {
       body: JSON.stringify({
         cv_data: updatedCv,
         job_title: cvState.selectedJob.title,
-        company: cvState.selectedJob.company
+        company: cvState.selectedJob.company,
+        theme: cvState.theme
       })
     });
 

@@ -61,11 +61,11 @@ def read_cv(file_path: str) -> str:
     else:
         raise ValueError(f"Unsupported file format: {ext}. Only PDF, DOCX, TXT, or MD are supported.")
 
-def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
+def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist") -> None:
     """Save CV JSON data to a styled DOCX file."""
     doc = docx.Document()
     
-    # Set standard ATS margins (1 inch / 0.75 inch)
+    # Set margins
     sections = doc.sections
     for section in sections:
         section.top_margin = Inches(0.8)
@@ -73,24 +73,78 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
         section.left_margin = Inches(0.8)
         section.right_margin = Inches(0.8)
         
-    # Styles config
-    # Set default font
+    # Styles config default values
+    font_name = 'Calibri'
+    heading_font_name = 'Calibri'
+    heading_color = docx.shared.RGBColor(26, 26, 26)
+    name_color = docx.shared.RGBColor(26, 26, 26)
+    line_color = docx.shared.RGBColor(180, 180, 180)
+    meta_color = docx.shared.RGBColor(100, 100, 100)
+    name_size = Pt(20)
+    heading_size = Pt(12)
+    body_size = Pt(11)
+    meta_size = Pt(9.5)
+    name_align = WD_ALIGN_PARAGRAPH.CENTER
+    contact_align = WD_ALIGN_PARAGRAPH.CENTER
+    headings_align = WD_ALIGN_PARAGRAPH.LEFT
+    
+    # Theme overrides
+    if theme == "executive":
+        font_name = 'Calibri'
+        heading_font_name = 'Georgia'
+        heading_color = docx.shared.RGBColor(30, 58, 138) # Dark Navy
+        name_color = docx.shared.RGBColor(30, 58, 138)
+        line_color = docx.shared.RGBColor(59, 130, 246) # Blue accent line
+        name_align = WD_ALIGN_PARAGRAPH.LEFT
+        contact_align = WD_ALIGN_PARAGRAPH.LEFT
+    elif theme == "creative":
+        font_name = 'Arial'
+        heading_font_name = 'Arial'
+        heading_color = docx.shared.RGBColor(15, 118, 110) # Teal
+        name_color = docx.shared.RGBColor(15, 118, 110)
+        line_color = docx.shared.RGBColor(13, 148, 136) # Teal accent line
+        name_align = WD_ALIGN_PARAGRAPH.LEFT
+        contact_align = WD_ALIGN_PARAGRAPH.LEFT
+    elif theme == "tech":
+        font_name = 'Consolas'
+        heading_font_name = 'Consolas'
+        heading_color = docx.shared.RGBColor(15, 23, 42) # Charcoal
+        name_color = docx.shared.RGBColor(15, 23, 42)
+        line_color = docx.shared.RGBColor(100, 116, 139) # Slate line
+        name_align = WD_ALIGN_PARAGRAPH.LEFT
+        contact_align = WD_ALIGN_PARAGRAPH.LEFT
+        name_size = Pt(18)
+        heading_size = Pt(11)
+        body_size = Pt(10)
+    elif theme == "academic":
+        font_name = 'Times New Roman'
+        heading_font_name = 'Times New Roman'
+        heading_color = docx.shared.RGBColor(26, 26, 26)
+        name_color = docx.shared.RGBColor(26, 26, 26)
+        line_color = docx.shared.RGBColor(80, 80, 80)
+        name_align = WD_ALIGN_PARAGRAPH.CENTER
+        contact_align = WD_ALIGN_PARAGRAPH.CENTER
+        headings_align = WD_ALIGN_PARAGRAPH.CENTER
+        body_size = Pt(10.5)
+
+    # Set default font on Normal style
     style = doc.styles['Normal']
     font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(11)
+    font.name = font_name
+    font.size = body_size
     
     # Header: Name
     name_p = doc.add_paragraph()
-    name_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    name_p.alignment = name_align
     name_run = name_p.add_run(cv_data.get("name", "Your Name"))
-    name_run.font.size = Pt(20)
+    name_run.font.name = heading_font_name
+    name_run.font.size = name_size
     name_run.font.bold = True
-    name_run.font.color.rgb = docx.shared.RGBColor(26, 26, 26)
+    name_run.font.color.rgb = name_color
     
     # Header: Contact Info
     contact_p = doc.add_paragraph()
-    contact_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    contact_p.alignment = contact_align
     contact_info = cv_data.get("contact_info", "")
     if isinstance(contact_info, list):
         contact_text = "  |  ".join(contact_info)
@@ -98,10 +152,11 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
         contact_text = str(contact_info)
     
     contact_run = contact_p.add_run(contact_text)
-    contact_run.font.size = Pt(9.5)
+    contact_run.font.name = font_name
+    contact_run.font.size = meta_size
     contact_run.font.italic = False
     
-    # Add a thin line under header spacing
+    # Add spacing under header
     p_space = doc.add_paragraph()
     p_space.paragraph_format.space_after = Pt(10)
     
@@ -116,49 +171,54 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
             
         # Section Heading
         head_p = doc.add_paragraph()
+        head_p.alignment = headings_align
         head_p.paragraph_format.space_before = Pt(12)
         head_p.paragraph_format.space_after = Pt(4)
         head_p.paragraph_format.keep_with_next = True
         
         head_run = head_p.add_run(title.upper())
-        head_run.font.size = Pt(12)
+        head_run.font.name = heading_font_name
+        head_run.font.size = heading_size
         head_run.font.bold = True
-        head_run.font.color.rgb = docx.shared.RGBColor(26, 26, 26)
+        head_run.font.color.rgb = heading_color
         
-        # Add a border bottom for the heading (ATS friendly divider)
-        # Using a horizontal line paragraph is cleaner in Word
+        # Add border divider bottom
         p_line = doc.add_paragraph()
+        p_line.alignment = headings_align
         p_line.paragraph_format.space_after = Pt(6)
-        p_line_run = p_line.add_run("―" * 60)
+        line_chars = "―" * (45 if headings_align == WD_ALIGN_PARAGRAPH.CENTER else 60)
+        p_line_run = p_line.add_run(line_chars)
         p_line_run.font.size = Pt(6)
-        p_line_run.font.color.rgb = docx.shared.RGBColor(180, 180, 180)
+        p_line_run.font.color.rgb = line_color
         
         if sec_type == "text":
-            p = doc.add_paragraph(str(content))
+            p = doc.add_paragraph()
             p.paragraph_format.space_after = Pt(8)
             p.paragraph_format.line_spacing = 1.15
+            run = p.add_run(str(content))
+            run.font.name = font_name
+            run.font.size = body_size
             
         elif sec_type == "list":
             if isinstance(content, list):
-                # Comma separated list for skills is very standard
                 skills_text = ", ".join(str(item) for item in content)
-                p = doc.add_paragraph(skills_text)
-                p.paragraph_format.space_after = Pt(8)
-                p.paragraph_format.line_spacing = 1.15
             else:
-                p = doc.add_paragraph(str(content))
-                p.paragraph_format.space_after = Pt(8)
+                skills_text = str(content)
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(8)
+            p.paragraph_format.line_spacing = 1.15
+            run = p.add_run(skills_text)
+            run.font.name = font_name
+            run.font.size = body_size
                 
         elif sec_type == "experience" or sec_type == "education":
             if isinstance(content, list):
                 for idx, item in enumerate(content):
-                    # Experience block
                     exp_p = doc.add_paragraph()
                     exp_p.paragraph_format.space_before = Pt(4) if idx > 0 else Pt(0)
                     exp_p.paragraph_format.space_after = Pt(2)
                     exp_p.paragraph_format.keep_with_next = True
                     
-                    # Left side: Role/Degree (Bold) and Company/Institution (Italic)
                     if sec_type == "experience":
                         role = item.get("role", "")
                         company = item.get("company", "")
@@ -174,14 +234,15 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
                     location = item.get("location", "")
                     
                     r_title = exp_p.add_run(title_str)
+                    r_title.font.name = font_name
+                    r_title.font.size = body_size
                     r_title.bold = True
                     
                     r_comp = exp_p.add_run(company_str)
+                    r_comp.font.name = font_name
+                    r_comp.font.size = body_size
                     r_comp.italic = True
                     
-                    # Right side: Period / Location
-                    # We can use tabs or write a clean single line. Word tables or right tab stops are ideal.
-                    # For ATS, simple text layout is best. We'll add Period and Location inline.
                     meta_parts = []
                     if location:
                         meta_parts.append(location)
@@ -191,25 +252,30 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str) -> None:
                     if meta_parts:
                         meta_str = f" ({', '.join(meta_parts)})"
                         r_meta = exp_p.add_run(meta_str)
-                        r_meta.font.color.rgb = docx.shared.RGBColor(100, 100, 100)
+                        r_meta.font.name = font_name
+                        r_meta.font.size = meta_size
+                        r_meta.font.color.rgb = meta_color
                         
-                    # Bullets
                     bullets = item.get("bullets", [])
                     if isinstance(bullets, list):
                         for bullet in bullets:
                             bp = doc.add_paragraph(style='List Bullet')
                             bp.paragraph_format.space_after = Pt(2)
                             bp.paragraph_format.line_spacing = 1.1
-                            bp.add_run(str(bullet))
+                            brun = bp.add_run(str(bullet))
+                            brun.font.name = font_name
+                            brun.font.size = body_size - Pt(1) # slightly smaller bullets
             else:
-                p = doc.add_paragraph(str(content))
+                p = doc.add_paragraph()
                 p.paragraph_format.space_after = Pt(8)
+                run = p.add_run(str(content))
+                run.font.name = font_name
+                run.font.size = body_size
                 
     doc.save(output_path)
 
-def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str) -> None:
+def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist") -> None:
     """Save CV JSON data to an ATS-friendly, professional PDF using ReportLab."""
-    # Letter size page setup (8.5 x 11 inches)
     doc = SimpleDocTemplate(
         output_path,
         pagesize=letter,
@@ -221,37 +287,167 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str) -> None:
     
     styles = getSampleStyleSheet()
     
+    # Set default values for theme
+    font_regular = 'Helvetica'
+    font_bold = 'Helvetica-Bold'
+    font_italic = 'Helvetica-Oblique'
+    
+    name_font = 'Helvetica-Bold'
+    name_size = 20
+    name_leading = 24
+    name_color = colors.HexColor('#1A1A1A')
+    name_align = TA_CENTER
+    
+    contact_font = 'Helvetica'
+    contact_size = 9.5
+    contact_leading = 12
+    contact_color = colors.HexColor('#4A4A4A')
+    contact_align = TA_CENTER
+    
+    heading_font = 'Helvetica-Bold'
+    heading_size = 12
+    heading_leading = 14
+    heading_color = colors.HexColor('#1A1A1A')
+    heading_align = TA_LEFT
+    heading_line_color = colors.HexColor('#CCCCCC')
+    
+    body_font = 'Helvetica'
+    body_size = 10
+    body_leading = 14
+    body_color = colors.HexColor('#2D2D2D')
+    
+    bullet_font = 'Helvetica'
+    bullet_size = 9.5
+    bullet_leading = 13.5
+    bullet_color = colors.HexColor('#2D2D2D')
+    
+    if theme == "executive":
+        font_regular = 'Helvetica'
+        font_bold = 'Helvetica-Bold'
+        font_italic = 'Helvetica-Oblique'
+        
+        name_font = 'Times-Bold' # Elegant serif for name
+        name_color = colors.HexColor('#1E3A8A') # Navy
+        name_align = TA_LEFT
+        
+        contact_color = colors.HexColor('#475569')
+        contact_align = TA_LEFT
+        
+        heading_font = 'Times-Bold'
+        heading_color = colors.HexColor('#1E3A8A')
+        heading_align = TA_LEFT
+        heading_line_color = colors.HexColor('#3B82F6') # Blue line
+        
+    elif theme == "creative":
+        font_regular = 'Helvetica'
+        font_bold = 'Helvetica-Bold'
+        font_italic = 'Helvetica-Oblique'
+        
+        name_font = 'Helvetica-Bold'
+        name_color = colors.HexColor('#0F766E') # Teal
+        name_align = TA_LEFT
+        
+        contact_color = colors.HexColor('#0D9488')
+        contact_align = TA_LEFT
+        
+        heading_font = 'Helvetica-Bold'
+        heading_color = colors.HexColor('#0F766E')
+        heading_align = TA_LEFT
+        heading_line_color = colors.HexColor('#14B8A6') # Teal accent line
+        
+    elif theme == "tech":
+        font_regular = 'Courier'
+        font_bold = 'Courier-Bold'
+        font_italic = 'Courier-Oblique'
+        
+        name_font = 'Courier-Bold'
+        name_size = 18
+        name_leading = 22
+        name_color = colors.HexColor('#0F172A') # Charcoal
+        name_align = TA_LEFT
+        
+        contact_font = 'Courier'
+        contact_color = colors.HexColor('#64748B')
+        contact_align = TA_LEFT
+        
+        heading_font = 'Courier-Bold'
+        heading_size = 11
+        heading_leading = 13
+        heading_color = colors.HexColor('#0F172A')
+        heading_align = TA_LEFT
+        heading_line_color = colors.HexColor('#64748B')
+        
+        body_font = 'Courier'
+        body_size = 9.5
+        body_leading = 13
+        body_color = colors.HexColor('#334155')
+        
+        bullet_font = 'Courier'
+        bullet_size = 9
+        bullet_leading = 12.5
+        bullet_color = colors.HexColor('#334155')
+        
+    elif theme == "academic":
+        font_regular = 'Times-Roman'
+        font_bold = 'Times-Bold'
+        font_italic = 'Times-Italic'
+        
+        name_font = 'Times-Bold'
+        name_size = 22
+        name_leading = 26
+        name_color = colors.HexColor('#000000')
+        name_align = TA_CENTER
+        
+        contact_font = 'Times-Roman'
+        contact_color = colors.HexColor('#2D2D2D')
+        contact_align = TA_CENTER
+        
+        heading_font = 'Times-Bold'
+        heading_color = colors.HexColor('#1A1A1A')
+        heading_align = TA_CENTER
+        heading_line_color = colors.HexColor('#1A1A1A')
+        
+        body_font = 'Times-Roman'
+        body_size = 10.5
+        body_leading = 14.5
+        body_color = colors.HexColor('#1A1A1A')
+        
+        bullet_font = 'Times-Roman'
+        bullet_size = 10
+        bullet_leading = 14
+        bullet_color = colors.HexColor('#1A1A1A')
+
     # Custom Styles
     style_name = ParagraphStyle(
         'CVName',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=20,
-        leading=24,
-        textColor=colors.HexColor('#1A1A1A'),
-        alignment=TA_CENTER,
+        fontName=name_font,
+        fontSize=name_size,
+        leading=name_leading,
+        textColor=name_color,
+        alignment=name_align,
         spaceAfter=6
     )
     
     style_contact = ParagraphStyle(
         'CVContact',
         parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=9.5,
-        leading=12,
-        textColor=colors.HexColor('#4A4A4A'),
-        alignment=TA_CENTER,
+        fontName=contact_font,
+        fontSize=contact_size,
+        leading=contact_leading,
+        textColor=contact_color,
+        alignment=contact_align,
         spaceAfter=15
     )
     
     style_heading = ParagraphStyle(
         'CVHeading',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=12,
-        leading=14,
-        textColor=colors.HexColor('#1A1A1A'),
-        alignment=TA_LEFT,
+        fontName=heading_font,
+        fontSize=heading_size,
+        leading=heading_leading,
+        textColor=heading_color,
+        alignment=heading_align,
         spaceBefore=12,
         spaceAfter=4,
         keepWithNext=True
@@ -260,20 +456,20 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str) -> None:
     style_body = ParagraphStyle(
         'CVBody',
         parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=10,
-        leading=14,
-        textColor=colors.HexColor('#2D2D2D'),
+        fontName=body_font,
+        fontSize=body_size,
+        leading=body_leading,
+        textColor=body_color,
         spaceAfter=8
     )
     
     style_bullet = ParagraphStyle(
         'CVBullet',
         parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=9.5,
-        leading=13.5,
-        textColor=colors.HexColor('#2D2D2D'),
+        fontName=bullet_font,
+        fontSize=bullet_size,
+        leading=bullet_leading,
+        textColor=bullet_color,
         leftIndent=15,
         firstLineIndent=-10,
         spaceAfter=3
@@ -306,8 +502,8 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str) -> None:
         # Thin divider line under header
         story.append(HRFlowable(
             width="100%", 
-            thickness=0.5, 
-            color=colors.HexColor('#CCCCCC'), 
+            thickness=0.75 if theme in ["executive", "creative"] else 0.5, 
+            color=heading_line_color, 
             spaceBefore=1, 
             spaceAfter=8
         ))
@@ -360,9 +556,9 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str) -> None:
                     story.append(Paragraph(block_header, ParagraphStyle(
                         'BlockHeader',
                         parent=styles['Normal'],
-                        fontName='Helvetica',
-                        fontSize=10,
-                        leading=13,
+                        fontName=font_regular,
+                        fontSize=body_size,
+                        leading=body_leading - 1,
                         spaceAfter=3,
                         keepWithNext=True
                     )))

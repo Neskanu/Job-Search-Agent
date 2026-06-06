@@ -189,13 +189,24 @@
       
       <!-- Download Buttons & Save trigger -->
       <div class="flex items-center gap-3 hidden" id="download-actions-bar">
-        <button onclick="saveAndCompile()" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-sm">
+        <!-- Style Selector Dropdown -->
+        <div class="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-sm">
+          <label for="cv-theme-select" class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Layout Style:</label>
+          <select id="cv-theme-select" onchange="changeCVTheme()" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+            <option value="minimalist">Minimalist Classic</option>
+            <option value="executive">Modern Executive</option>
+            <option value="creative">Creative Teal</option>
+            <option value="tech">Charcoal Developer</option>
+            <option value="academic">Traditional Serif</option>
+          </select>
+        </div>
+        <button onclick="saveAndCompile()" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-sm">
           💾 Save Changes
         </button>
-        <button onclick="downloadFormat('docx')" class="bg-gradient-to-r from-[#11998e] to-[#38ef7d] text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
+        <button onclick="downloadFormat('docx')" class="bg-gradient-to-r from-[#11998e] to-[#38ef7d] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
           📝 Word (.docx)
         </button>
-        <button onclick="downloadFormat('pdf')" class="bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
+        <button onclick="downloadFormat('pdf')" class="bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
           📄 PDF
         </button>
       </div>
