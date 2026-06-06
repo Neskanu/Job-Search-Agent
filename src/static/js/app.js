@@ -344,11 +344,8 @@ function renderWYSIWYG(cvData) {
   // Sync style theme classes on resume-sheet
   const sheet = document.getElementById("resume-sheet");
   if (sheet) {
-    sheet.classList.forEach(cls => {
-      if (cls.startsWith("theme-")) {
-        sheet.classList.remove(cls);
-      }
-    });
+    const classesToRemove = Array.from(sheet.classList).filter(cls => cls.startsWith("theme-"));
+    classesToRemove.forEach(cls => sheet.classList.remove(cls));
     const selectedTheme = document.getElementById("cv-theme-select").value || "minimalist";
     sheet.classList.add(`theme-${selectedTheme}`);
     cvState.theme = selectedTheme;
@@ -460,11 +457,8 @@ function changeCVTheme() {
   
   const sheet = document.getElementById("resume-sheet");
   if (sheet) {
-    sheet.classList.forEach(cls => {
-      if (cls.startsWith("theme-")) {
-        sheet.classList.remove(cls);
-      }
-    });
+    const classesToRemove = Array.from(sheet.classList).filter(cls => cls.startsWith("theme-"));
+    classesToRemove.forEach(cls => sheet.classList.remove(cls));
     sheet.classList.add(`theme-${selectedTheme}`);
   }
   

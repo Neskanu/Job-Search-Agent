@@ -124,32 +124,44 @@ select, input, textarea {
 #resume-sheet {
   position: relative;
   transition: all 0.3s ease;
-  overflow: visible;
+  overflow: visible !important;
+  background-color: transparent !important;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #FFFFFF 0px,
+    #FFFFFF 859px,
+    #E2E8F0 859px, /* Page bottom border line */
+    #E2E8F0 860px,
+    #FAFAFB 860px, /* Workspace background color gap (20px) */
+    #FAFAFB 879px,
+    #E2E8F0 879px, /* Next page top border line */
+    #E2E8F0 880px
+  ) !important;
+  background-size: 100% 880px !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-left: 1px solid #E2E8F0 !important;
+  border-right: 1px solid #E2E8F0 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
 }
 
-/* Simulated Page Breaks at exactly every 880px intervals (matching US Letter/A4 canvas proportion) */
+/* Hide the absolute ::after overlay since background repeating-linear-gradient sits behind text natively */
 #resume-sheet::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0px,
-    transparent 879px,
-    #CBD5E1 879px, /* Page Top Line */
-    #CBD5E1 880px,
-    #F1F5F9 880px, /* Page Gap Color */
-    #F1F5F9 892px,
-    #CBD5E1 892px, /* Page Bottom Line */
-    #CBD5E1 893px,
-    transparent 893px,
-    transparent 1760px
-  );
-  background-size: 100% 880px;
+  display: none !important;
+}
+
+/* Padding for inner content since sheet padding is removed for page backgrounds */
+#resume-sheet > div {
+  padding-left: 3.5rem !important;
+  padding-right: 3.5rem !important;
+}
+#resume-sheet > div:first-child {
+  padding-top: 3.5rem !important;
+}
+#sections-list {
+  padding-bottom: 3.5rem !important;
 }
 
 /* 🎨 THEME 1: Minimalist Classic (Default CSS rules inherited mostly) */
