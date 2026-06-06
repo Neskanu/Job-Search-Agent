@@ -106,12 +106,30 @@ def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> D
             
         page = context.new_page()
         
+        fallback_triggered = False
         try:
             page.set_default_timeout(15000)
-            page.goto(clean_url)
+            try:
+                page.goto(clean_url)
+            except Exception as goto_err:
+                # If navigation fails due to too many redirects and a cookie was used,
+                # the cookie is likely invalid or expired. Fall back to a clean context.
+                if "ERR_TOO_MANY_REDIRECTS" in str(goto_err) and li_at_cookie:
+                    fallback_triggered = True
+                    page.close()
+                    context.close()
+                    context = browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    page = context.new_page()
+                    page.set_default_timeout(15000)
+                    page.goto(clean_url)
+                else:
+                    raise goto_err
+            
             page.wait_for_load_state("domcontentloaded")
             
-            if li_at_cookie:
+            if li_at_cookie and not fallback_triggered:
                 page.wait_for_timeout(2000)
                 
             # Extract Job Title
@@ -252,10 +270,27 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
             context.add_cookies(prepare_cookies(li_at_cookie))
             
         page = context.new_page()
-        page.set_default_timeout(20000)
         
+        fallback_triggered = False
         try:
-            page.goto(url)
+            page.set_default_timeout(20000)
+            try:
+                page.goto(url)
+            except Exception as goto_err:
+                # Fall back to clean context if invalid cookie causes redirect loop
+                if "ERR_TOO_MANY_REDIRECTS" in str(goto_err) and li_at_cookie:
+                    fallback_triggered = True
+                    page.close()
+                    context.close()
+                    context = browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    page = context.new_page()
+                    page.set_default_timeout(20000)
+                    page.goto(url)
+                else:
+                    raise goto_err
+            
             page.wait_for_load_state("domcontentloaded")
             page.wait_for_timeout(3000)
             
