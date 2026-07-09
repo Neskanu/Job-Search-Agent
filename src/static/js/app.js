@@ -830,7 +830,7 @@ function refreshPDFPreview() {
   if (!iframe) return;
   
   if (cvState.tailoredPdfPath) {
-    iframe.src = `/api/download?path=${encodeURIComponent(cvState.tailoredPdfPath)}&t=${Date.now()}#toolbar=0&navpanes=0`;
+    iframe.src = `/api/download?path=${encodeURIComponent(cvState.tailoredPdfPath)}&inline=true&t=${Date.now()}#toolbar=0&navpanes=0`;
   } else {
     iframe.src = "about:blank";
   }

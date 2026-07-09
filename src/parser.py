@@ -564,13 +564,48 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         contact_text = str(contact_info)
 
     # Build Header Layout based on theme and photo
-    if theme in ["minimalist", "academic"]:
+    if theme == "creative":
+        from reportlab.platypus import Table, TableStyle
+        name_style_white = ParagraphStyle(
+            'CreativeName', parent=style_name, textColor=colors.white, alignment=TA_LEFT if image_flowable else TA_CENTER
+        )
+        contact_style_white = ParagraphStyle(
+            'CreativeContact', parent=style_contact, textColor=colors.HexColor('#CCFBF1'), alignment=TA_LEFT if image_flowable else TA_CENTER, spaceAfter=0
+        )
+        
+        if image_flowable:
+            image_flowable.hAlign = 'LEFT'
+            text_story = [
+                Paragraph(cv_data.get("name", "Your Name"), name_style_white),
+                Paragraph(contact_text, contact_style_white)
+            ]
+            header_table = Table([[image_flowable, text_story]], colWidths=[80, 424])
+        else:
+            text_story = [
+                Paragraph(cv_data.get("name", "Your Name"), name_style_white),
+                Paragraph(contact_text, contact_style_white)
+            ]
+            header_table = Table([[text_story]], colWidths=[504])
+            
+        header_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#0F766E')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LEFTPADDING', (0,0), (-1,-1), 18),
+            ('RIGHTPADDING', (0,0), (-1,-1), 18),
+            ('TOPPADDING', (0,0), (-1,-1), 18),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 18),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 15))
+        
+    elif theme in ["minimalist", "academic"]:
         if image_flowable:
             story.append(image_flowable)
             story.append(Spacer(1, 6))
         story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
         story.append(Paragraph(contact_text, style_contact))
     else:
+        # executive and tech themes (left-aligned)
         if image_flowable:
             from reportlab.platypus import Table, TableStyle
             image_flowable.hAlign = 'LEFT'
@@ -683,4 +718,14 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
                 story.append(Paragraph(str(content), style_body))
                 
     # Build Document
-    doc.build(story)
+    if theme == "executive":
+        def draw_executive_decorations(canvas, doc):
+            canvas.saveState()
+            canvas.setStrokeColor(colors.HexColor('#1E293B'))
+            canvas.setLineWidth(6)
+            canvas.line(18, 18, 18, 792 - 18)
+            canvas.restoreState()
+            
+        doc.build(story, onFirstPage=draw_executive_decorations, onLaterPages=draw_executive_decorations)
+    else:
+        doc.build(story)

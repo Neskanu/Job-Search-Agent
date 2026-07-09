@@ -220,10 +220,11 @@ async def generate_docs(request: GenerateDocsRequest):
 @app.get("/api/download", summary="Download file response")
 async def download_file(
     path: str = Query(..., description="Absolute path to the generated file"),
+    inline: Optional[bool] = Query(default=False, description="Whether to view file inline in browser"),
     t: Optional[str] = None
 ):
     """
-    Serves the compiled PDF or Word file as a file download.
+    Serves the compiled PDF or Word file as a file download or inline view.
     Implements security bounds checks to avoid directory traversal.
     """
     abs_path = os.path.abspath(path)
@@ -237,11 +238,24 @@ async def download_file(
         raise HTTPException(status_code=404, detail="Requested file not found on disk.")
         
     filename = os.path.basename(abs_path)
-    # FileResponse handles asynchronous file chunking and header setup (Content-Disposition)
+    
+    headers = {}
+    if inline:
+        headers["Content-Disposition"] = "inline"
+        if abs_path.lower().endswith(".pdf"):
+            media_type = "application/pdf"
+        elif abs_path.lower().endswith(".docx"):
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            media_type = "application/octet-stream"
+    else:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        media_type = "application/octet-stream"
+        
     return FileResponse(
         path=abs_path, 
-        filename=filename, 
-        media_type="application/octet-stream"
+        media_type=media_type,
+        headers=headers
     )
 
 # ==========================================
