@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,7 @@ from pydantic import BaseModel, Field
 # Ensure project root is in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf
+from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to_json
 from src.scraper import scrape_job_details, search_linkedin_jobs
 from src.agent import run_cv_tailoring_pipeline, sanitize_filename
 
@@ -48,28 +49,29 @@ app.add_middleware(
 # if validation fails, and document these schemas in the Swagger UI.
 
 class SearchRequest(BaseModel):
-    keywords: str = Field(..., example="Python Developer")
-    location: str = Field(..., example="United States")
-    limit: int = Field(default=5, ge=1, le=25, example=5)
+    keywords: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    location: str = Field(..., json_schema_extra={"example": "United States"})
+    limit: int = Field(default=5, ge=1, le=25, json_schema_extra={"example": 5})
     li_at_cookie: Optional[str] = Field(default=None, description="LinkedIn li_at session cookie")
 
 class ScrapeRequest(BaseModel):
-    url: str = Field(..., example="https://www.linkedin.com/jobs/view/123456789/")
+    url: str = Field(..., json_schema_extra={"example": "https://www.linkedin.com/jobs/view/123456789/"})
     li_at_cookie: Optional[str] = Field(default=None)
 
 class TailorRequest(BaseModel):
-    original_cv_path: str = Field(..., example="data/original_cv/my_cv.pdf")
-    job_description_text: str = Field(..., example="We are looking for a Python engineer...")
-    job_title: str = Field(..., example="Python Developer")
-    company: str = Field(..., example="Google")
-    provider: str = Field(..., example="gemini", description="Must be 'gemini' or 'ollama'")
-    llm_config: Dict[str, Any] = Field(..., example={"gemini_model": "gemini-2.5-flash"})
+    original_cv_path: str = Field(..., json_schema_extra={"example": "data/original_cv/my_cv.pdf"})
+    job_description_text: str = Field(..., json_schema_extra={"example": "We are looking for a Python engineer..."})
+    job_title: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    company: str = Field(..., json_schema_extra={"example": "Google"})
+    provider: str = Field(..., json_schema_extra={"example": "gemini"}, description="Must be 'gemini' or 'ollama'")
+    llm_config: Dict[str, Any] = Field(..., json_schema_extra={"example": {"gemini_model": "gemini-2.5-flash"}})
     additional_info: Optional[str] = Field(default=None)
 
 class GenerateDocsRequest(BaseModel):
     cv_data: Dict[str, Any] = Field(..., description="The fully updated JSON representation of the CV")
-    job_title: str = Field(..., example="Python Developer")
-    company: str = Field(..., example="Google")
+    job_title: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    company: str = Field(..., json_schema_extra={"example": "Google"})
+    theme: Optional[str] = Field(default="minimalist", description="CV layout style template theme")
 
 # ==========================================
 # 🛠️ API ENDPOINTS
@@ -83,36 +85,101 @@ class GenerateDocsRequest(BaseModel):
 async def upload_cv(file: UploadFile = File(...)):
     """
     Uploads a CV file (PDF or DOCX), saves it to the local data directory,
-    and returns the extracted raw text along with the saved file path.
+    parses it into structured cv_data JSON, compiles a preview PDF, and returns the workspace state.
     """
-    # Verify file extension
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ['.pdf', '.docx', '.txt', '.md']:
         raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or MD.")
         
     os.makedirs("data/original_cv", exist_ok=True)
-    save_path = os.path.join("data/original_cv", file.filename)
+    save_path = os.path.join("data/original_cv", file.filename).replace("\\", "/")
     
-    # Save the file asynchronously
     try:
         content = await file.read()
-        # writing file to disk is blocking, so run it in thread pool
         await asyncio.to_thread(lambda: open(save_path, "wb").write(content))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
         
-    # Read CV text
     try:
-        # read_cv is blocking, so run it in thread pool
         cv_text = await asyncio.to_thread(read_cv, save_path)
+        cv_data = parse_raw_cv_to_json(cv_text, file.filename)
+        
+        # Compile a PDF preview for the uploaded document
+        base_name = os.path.splitext(file.filename)[0]
+        pdf_preview_path = os.path.join("data/original_cv", f"preview_{base_name}.pdf").replace("\\", "/")
+        await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_preview_path)
+        
         return {
             "success": True,
             "filename": file.filename,
             "file_path": save_path,
+            "pdf_path": pdf_preview_path,
+            "cv_data": cv_data,
             "text": cv_text
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse CV document: {str(e)}")
+
+
+@app.get("/api/list-cvs", summary="List stored original and tailored CVs")
+async def list_cvs():
+    """Returns lists of stored original CVs and previously generated tailored CVs."""
+    os.makedirs("data/original_cv", exist_ok=True)
+    os.makedirs("data/tailored_cvs", exist_ok=True)
+    
+    orig_files = []
+    # Check data/original_cv
+    for f in os.listdir("data/original_cv"):
+        if f.lower().endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_") and not f.endswith("_preview.pdf"):
+            orig_files.append({"name": f, "path": f"data/original_cv/{f}"})
+            
+    # Also check data/ root folder for any original CV files
+    for f in os.listdir("data"):
+        p = os.path.join("data", f)
+        if os.path.isfile(p) and f.lower().endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_"):
+            orig_files.append({"name": f, "path": f"data/{f}"})
+            
+    tailored_files = []
+    for f in os.listdir("data/tailored_cvs"):
+        if f.lower().endswith(('.pdf', '.docx')):
+            tailored_files.append({"name": f, "path": f"data/tailored_cvs/{f}"})
+            
+    return {
+        "success": True,
+        "original_cvs": orig_files,
+        "tailored_cvs": tailored_files
+    }
+
+
+class LoadCVRequest(BaseModel):
+    path: str
+
+@app.post("/api/load-cv", summary="Load previously saved CV from disk")
+async def load_cv(request: LoadCVRequest):
+    """Loads a previously uploaded original CV or tailored CV from disk and parses it for WYSIWYG rendering."""
+    if not os.path.exists(request.path):
+        raise HTTPException(status_code=404, detail=f"File not found: {request.path}")
+        
+    try:
+        cv_text = await asyncio.to_thread(read_cv, request.path)
+        filename = os.path.basename(request.path)
+        cv_data = parse_raw_cv_to_json(cv_text, filename)
+        
+        pdf_path = request.path
+        if not request.path.lower().endswith(".pdf"):
+            pdf_path = os.path.splitext(request.path)[0] + "_preview.pdf"
+            await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_path)
+            
+        return {
+            "success": True,
+            "filename": filename,
+            "file_path": request.path,
+            "pdf_path": pdf_path,
+            "cv_data": cv_data,
+            "text": cv_text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load CV: {str(e)}")
 
 
 @app.post("/api/search-jobs", summary="Browse LinkedIn jobs")
@@ -203,9 +270,9 @@ async def generate_docs(request: GenerateDocsRequest):
         docx_path = os.path.join("data/tailored_cvs", f"{filename_base}.docx")
         pdf_path = os.path.join("data/tailored_cvs", f"{filename_base}.pdf")
         
-        # Save files on background threads to prevent event loop lag
-        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path)
-        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path)
+        # Save files on background threads to prevent event loop lag, passing selected theme layout
+        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path, request.theme)
+        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path, request.theme)
         
         return {
             "success": True,
@@ -217,15 +284,19 @@ async def generate_docs(request: GenerateDocsRequest):
 
 
 @app.get("/api/download", summary="Download file response")
-async def download_file(path: str = Query(..., description="Absolute path to the generated file")):
+async def download_file(
+    path: str = Query(..., description="Absolute path to the generated file"),
+    inline: Optional[bool] = Query(default=False, description="Whether to view file inline in browser"),
+    t: Optional[str] = None
+):
     """
-    Serves the compiled PDF or Word file as a file download.
+    Serves the compiled PDF or Word file as a file download or inline view.
     Implements security bounds checks to avoid directory traversal.
     """
     abs_path = os.path.abspath(path)
-    allowed_dir = os.path.abspath("data/tailored_cvs")
+    allowed_dir = os.path.abspath("data")
     
-    # SECURITY: Ensure path is within the allowed output directory boundary
+    # SECURITY: Ensure path is within the data output directory boundary
     if not abs_path.startswith(allowed_dir):
         raise HTTPException(status_code=403, detail="Unauthorized file access path.")
         
@@ -233,11 +304,26 @@ async def download_file(path: str = Query(..., description="Absolute path to the
         raise HTTPException(status_code=404, detail="Requested file not found on disk.")
         
     filename = os.path.basename(abs_path)
-    # FileResponse handles asynchronous file chunking and header setup (Content-Disposition)
+    encoded_filename = urllib.parse.quote(filename)
+    
+    headers = {}
+    if inline:
+        headers["Content-Disposition"] = "inline"
+        if abs_path.lower().endswith(".pdf"):
+            media_type = "application/pdf"
+        elif abs_path.lower().endswith(".docx"):
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            media_type = "application/octet-stream"
+    else:
+        # RFC 5987 standard encoding for UTF-8 filenames in HTTP headers
+        headers["Content-Disposition"] = f'attachment; filename="{encoded_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        media_type = "application/octet-stream"
+        
     return FileResponse(
         path=abs_path, 
-        filename=filename, 
-        media_type="application/octet-stream"
+        media_type=media_type,
+        headers=headers
     )
 
 # ==========================================
