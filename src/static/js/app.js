@@ -121,6 +121,7 @@ async function uploadCVFile() {
       document.getElementById("download-actions-bar").classList.remove("hidden");
       document.getElementById("resume-sheet").classList.remove("hidden");
       document.getElementById("cv-empty-placeholder").classList.add("hidden");
+      setViewMode("split");
     }
     if (data.pdf_path) {
       cvState.tailoredPdfPath = data.pdf_path;
@@ -129,6 +130,7 @@ async function uploadCVFile() {
 
     statusText.innerText = "Upload CV (PDF/DOCX)";
     showToast("CV uploaded and opened in canvas!");
+    alert(`📂 CV Uploaded Successfully!\n\nFile: ${data.filename}\nCharacters Parsed: ${data.text.length}\n\nYour CV is now loaded in the interactive WYSIWYG canvas.`);
     checkTailorEnable();
     saveAppStateToCache();
     loadSavedCVList();
@@ -347,7 +349,11 @@ function logDebug(msg, isError = false) {
 /**
  * Fetch list of saved original & tailored CV files from backend and populate dropdowns.
  */
+/**
+ * Fetch list of saved original & tailored CV files from backend and populate dropdowns.
+ */
 async function loadSavedCVList() {
+  logDebug("Refreshing saved CV library from server...");
   try {
     const response = await fetch("/api/list-cvs");
     const data = await response.json();
@@ -357,7 +363,10 @@ async function loadSavedCVList() {
     const tailoredSelect = document.getElementById("select-saved-tailored-cv");
 
     if (origSelect) {
-      origSelect.innerHTML = `<option value="">-- Choose Original CV --</option>`;
+      origSelect.innerHTML = `<option value="">-- Choose Original CV (${data.original_cvs.length} available) --</option>`;
+      if (data.original_cvs.length === 0) {
+        origSelect.innerHTML += `<option value="" disabled>(No original CVs found in data/original_cv)</option>`;
+      }
       data.original_cvs.forEach(file => {
         const opt = document.createElement("option");
         opt.value = file.path;
@@ -368,7 +377,10 @@ async function loadSavedCVList() {
     }
 
     if (tailoredSelect) {
-      tailoredSelect.innerHTML = `<option value="">-- Choose Tailored CV --</option>`;
+      tailoredSelect.innerHTML = `<option value="">-- Choose Tailored CV (${data.tailored_cvs.length} available) --</option>`;
+      if (data.tailored_cvs.length === 0) {
+        tailoredSelect.innerHTML += `<option value="" disabled>(No tailored CVs found in data/tailored_cvs)</option>`;
+      }
       data.tailored_cvs.forEach(file => {
         const opt = document.createElement("option");
         opt.value = file.path;
@@ -377,6 +389,7 @@ async function loadSavedCVList() {
         tailoredSelect.appendChild(opt);
       });
     }
+    logDebug(`✓ Saved CV Library updated: ${data.original_cvs.length} original CVs, ${data.tailored_cvs.length} tailored CVs.`);
   } catch (err) {
     console.warn("Failed to load saved CV list:", err);
   }
@@ -417,11 +430,13 @@ async function loadSelectedSavedCV(type) {
     document.getElementById("download-actions-bar").classList.remove("hidden");
     document.getElementById("resume-sheet").classList.remove("hidden");
     document.getElementById("cv-empty-placeholder").classList.add("hidden");
+    setViewMode("split");
 
     refreshPDFPreview();
     checkTailorEnable();
     saveAppStateToCache();
     showToast(`Loaded ${data.filename} into canvas!`);
+    alert(`📂 Loaded Saved CV into Canvas!\n\nFile: ${data.filename}\nCharacters Parsed: ${data.text.length}`);
   } catch (err) {
     alert(`Load Error: ${err.message}`);
   }
@@ -498,7 +513,9 @@ function checkTailorEnable() {
  * Trigger CV tailoring LLM agent pipeline.
  */
 async function tailorResume() {
-  logDebug("🚀 Optimize Resume for Role initiated.");
+  // GUARANTEED NOTIFICATION ON EVERY CLICK:
+  showToast("🚀 Optimize Resume clicked! Checking inputs...");
+  logDebug("🚀 Optimize Resume for Role button clicked.");
 
   // Auto-detect manually typed job in Tab 3 if selectedJob is not set
   if (!cvState.selectedJob) {
@@ -526,17 +543,13 @@ async function tailorResume() {
   if (!cvState.originalCvPath) {
     logDebug("❌ Validation Failed: No original CV uploaded.", true);
     showToast("⚠️ Please upload your original CV first!", true);
+    alert("⚠️ Missing Original CV!\n\nPlease upload a CV or select a previously saved CV from the library in Tab 1 ('📂 Upload') before optimizing.");
     showValidationModal(
       "Original CV Missing",
       "Please upload your original CV file (PDF or DOCX) in Tab 1 before optimizing.",
       "📁",
       `<button onclick="switchTab('upload'); closeValidationModal();" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">📂 Go to Upload Tab</button>`
     );
-    const uploadBox = document.getElementById("cv-file")?.closest("div");
-    if (uploadBox) {
-      uploadBox.classList.add("ring-4", "ring-rose-500");
-      setTimeout(() => uploadBox.classList.remove("ring-4", "ring-rose-500"), 2500);
-    }
     return;
   }
   logDebug(`✓ Original CV Path: ${cvState.originalCvPath}`);
@@ -545,9 +558,18 @@ async function tailorResume() {
   if (!cvState.selectedJob) {
     logDebug("❌ Validation Failed: No target job selected or entered.", true);
     showToast("⚠️ Please select a target job post first!", true);
+    alert("⚠️ Missing Target Job!\n\nPlease select a job from Tab 2 ('🔍 Search') or enter job details in Tab 3 ('✍️ Manual') before optimizing.");
     showValidationModal(
       "Target Job Missing",
       "Please select a job from Tab 2 ('Search') or enter job details in Tab 3 ('Manual').",
+      "🎯",
+      `<div class="flex gap-2 w-full">
+        <button onclick="switchTab('linkedin'); closeValidationModal();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">🔍 Search Jobs</button>
+        <button onclick="switchTab('manual'); closeValidationModal();" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg shadow-md">✍️ Manual Entry</button>
+       </div>`
+    );
+    return;
+  }
       "🎯",
       `<div class="flex gap-2 w-full">
         <button onclick="switchTab('linkedin'); closeValidationModal();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">🔍 Search Jobs</button>

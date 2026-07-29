@@ -127,14 +127,21 @@ async def list_cvs():
     os.makedirs("data/tailored_cvs", exist_ok=True)
     
     orig_files = []
+    # Check data/original_cv
     for f in os.listdir("data/original_cv"):
-        if f.endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_"):
-            orig_files.append({"name": f, "path": os.path.join("data/original_cv", f).replace("\\", "/")})
+        if f.lower().endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_") and not f.endswith("_preview.pdf"):
+            orig_files.append({"name": f, "path": f"data/original_cv/{f}"})
+            
+    # Also check data/ root folder for any original CV files
+    for f in os.listdir("data"):
+        p = os.path.join("data", f)
+        if os.path.isfile(p) and f.lower().endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_"):
+            orig_files.append({"name": f, "path": f"data/{f}"})
             
     tailored_files = []
     for f in os.listdir("data/tailored_cvs"):
-        if f.endswith(('.pdf', '.docx')):
-            tailored_files.append({"name": f, "path": os.path.join("data/tailored_cvs", f).replace("\\", "/")})
+        if f.lower().endswith(('.pdf', '.docx')):
+            tailored_files.append({"name": f, "path": f"data/tailored_cvs/{f}"})
             
     return {
         "success": True,
