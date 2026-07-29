@@ -293,9 +293,9 @@ async def download_file(
     Implements security bounds checks to avoid directory traversal.
     """
     abs_path = os.path.abspath(path)
-    allowed_dir = os.path.abspath("data/tailored_cvs")
+    allowed_dir = os.path.abspath("data")
     
-    # SECURITY: Ensure path is within the allowed output directory boundary
+    # SECURITY: Ensure path is within the data output directory boundary
     if not abs_path.startswith(allowed_dir):
         raise HTTPException(status_code=403, detail="Unauthorized file access path.")
         

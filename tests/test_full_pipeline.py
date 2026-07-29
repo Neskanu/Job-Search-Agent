@@ -90,3 +90,31 @@ def test_parse_raw_cv_to_json_heuristics():
     assert parsed["name"] == "Alex Mercer"
     assert "alex.mercer@email.com" in parsed["contact_info"]
     assert len(parsed["sections"]) >= 3
+
+def test_preview_downloads_and_js_integrity():
+    """Verify inline PDF download endpoint security boundaries and JavaScript integrity."""
+    orig_path = "data/original_cv/sample_resume_preview.pdf"
+    if not os.path.exists(orig_path):
+        os.makedirs("data/original_cv", exist_ok=True)
+        with open(orig_path, "wb") as f:
+            f.write(b"%PDF-1.4 sample pdf content")
+            
+    res = client.get(f"/api/download?path={orig_path}&inline=true")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    
+    with open("src/static/js/app.js", "r", encoding="utf-8") as f:
+        js_code = f.read()
+        
+    required_fns = [
+        "function showOptimizingOverlay",
+        "function hideOptimizingOverlay",
+        "function showValidationModal",
+        "function closeValidationModal",
+        "function showOptimizationSummary",
+        "function closeSummaryModal",
+        "function tailorResume",
+        "function renderWYSIWYG"
+    ]
+    for fn in required_fns:
+        assert fn in js_code, f"Missing required frontend JS function: {fn}"

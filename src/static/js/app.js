@@ -445,6 +445,20 @@ async function loadSelectedSavedCV(type) {
 }
 
 /**
+ * Display full-screen optimization overlay with step text & progress bar.
+ */
+function showOptimizingOverlay(stepText, progressPct = 35) {
+  const overlay = document.getElementById("optimizing-overlay");
+  const stepEl = document.getElementById("optimizing-overlay-step");
+  const barEl = document.getElementById("optimizing-progress-bar");
+  if (!overlay) return;
+  
+  overlay.classList.remove("hidden");
+  if (stepEl) stepEl.innerText = stepText;
+  if (barEl) barEl.style.width = `${progressPct}%`;
+}
+
+/**
  * Hide full-screen optimization overlay.
  */
 function hideOptimizingOverlay() {
