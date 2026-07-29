@@ -160,6 +160,7 @@ async function searchJobs() {
     cvState.searchResults = data.jobs;
     // Render job cards list
     data.jobs.forEach((job, idx) => {
+      const isSelected = cvState.selectedJob && cvState.selectedJob.title === job.title && cvState.selectedJob.company === job.company;
       const card = document.createElement("div");
       card.className = "bg-[#0F172A] border border-[#334155] rounded-xl p-4 space-y-2 relative";
       card.innerHTML = `
@@ -168,7 +169,9 @@ async function searchJobs() {
         <div class="text-[10px] text-slate-500">📍 ${job.location}</div>
         <div class="flex justify-between items-center mt-2 border-t border-[#1E293B] pt-2">
           <a href="${job.url}" target="_blank" class="text-[10px] text-slate-400 hover:underline">View Post 🔗</a>
-          <button onclick="selectJobByIndex(${idx})" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3 py-1 rounded cursor-pointer">Select Job</button>
+          <button onclick="selectJobByIndex(${idx})" class="job-card-select-btn ${isSelected ? 'bg-emerald-600 text-white font-bold shadow-sm' : 'bg-rose-600 hover:bg-rose-700 text-white font-bold'} text-[10px] px-3 py-1 rounded cursor-pointer transition-all">
+            ${isSelected ? '✔ Selected' : 'Select Job'}
+          </button>
         </div>
       `;
       resultsDiv.appendChild(card);
@@ -239,6 +242,17 @@ function selectManualJob() {
 
 function selectJobByIndex(idx) {
   if (cvState.searchResults && cvState.searchResults[idx]) {
+    // Update card button styles visually across all cards
+    document.querySelectorAll(".job-card-select-btn").forEach((btn, bIdx) => {
+      if (bIdx === idx) {
+        btn.innerText = "✔ Selected";
+        btn.className = "job-card-select-btn bg-emerald-600 text-white font-bold text-[10px] px-3 py-1 rounded cursor-pointer shadow-sm transition-all";
+      } else {
+        btn.innerText = "Select Job";
+        btn.className = "job-card-select-btn bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3 py-1 rounded cursor-pointer transition-all";
+      }
+    });
+
     selectJob(cvState.searchResults[idx]);
   }
 }
@@ -253,6 +267,14 @@ async function selectJob(job) {
   document.getElementById("banner-job-company").innerText = job.company;
   document.getElementById("target-selection-banner").classList.remove("hidden");
   
+  // Fill out the manual section form fields
+  if (document.getElementById("job-title")) document.getElementById("job-title").value = job.title || "";
+  if (document.getElementById("job-company")) document.getElementById("job-company").value = job.company || "";
+  if (document.getElementById("direct-job-url")) document.getElementById("direct-job-url").value = job.url || "";
+  if (document.getElementById("job-desc")) {
+    document.getElementById("job-desc").value = job.description || (job.url ? "Fetching full job description..." : "");
+  }
+
   showToast(`Selected Target: ${job.title} at ${job.company}`);
   checkTailorEnable();
   saveAppStateToCache();
@@ -272,11 +294,20 @@ async function selectJob(job) {
         cvState.selectedJob.description = data.description;
         if (data.title) cvState.selectedJob.title = data.title;
         if (data.company) cvState.selectedJob.company = data.company;
+        
+        // Update manual form fields with the scraped details
+        if (document.getElementById("job-title")) document.getElementById("job-title").value = cvState.selectedJob.title;
+        if (document.getElementById("job-company")) document.getElementById("job-company").value = cvState.selectedJob.company;
+        if (document.getElementById("job-desc")) document.getElementById("job-desc").value = data.description;
+        
         saveAppStateToCache();
         showToast(`Job details loaded! Ready to optimize.`);
       }
     } catch (err) {
       console.warn("Auto job scrape failed:", err);
+      if (document.getElementById("job-desc") && document.getElementById("job-desc").value === "Fetching full job description...") {
+        document.getElementById("job-desc").value = `Job Title: ${job.title}\nCompany: ${job.company}`;
+      }
     }
   }
 }
@@ -286,10 +317,8 @@ async function selectJob(job) {
  */
 function checkTailorEnable() {
   const btn = document.getElementById("btn-tailor-cv");
-  if (cvState.originalCvPath && cvState.selectedJob) {
+  if (btn) {
     btn.removeAttribute("disabled");
-  } else {
-    btn.setAttribute("disabled", "true");
   }
 }
 
@@ -298,13 +327,18 @@ function checkTailorEnable() {
  */
 async function tailorResume() {
   if (!cvState.originalCvPath) {
-    showToast("Please upload your original CV first (Tab 1).", true);
-    alert("Please upload your original CV first under Tab 1 ('Upload').");
+    switchTab('upload');
+    showToast("⚠️ Please upload your original CV first!", true);
+    const uploadBox = document.getElementById("cv-file")?.closest("div");
+    if (uploadBox) {
+      uploadBox.classList.add("ring-4", "ring-rose-500");
+      setTimeout(() => uploadBox.classList.remove("ring-4", "ring-rose-500"), 2500);
+    }
     return;
   }
   if (!cvState.selectedJob) {
-    showToast("Please select a target job first (Tab 2 or 3).", true);
-    alert("Please select a target job post under Tab 2 ('Search') or Tab 3 ('Manual').");
+    switchTab('linkedin');
+    showToast("⚠️ Please select a target job post first!", true);
     return;
   }
 
