@@ -65,6 +65,46 @@ def _run_in_thread(func, *args, **kwargs):
         exc, tb = val
         raise RuntimeError(f"Error in scraper thread: {exc}\n{tb}")
 
+def normalize_linkedin_url(url: str) -> str:
+    """
+    Safely normalize any raw LinkedIn job URL string into a clean canonical URL:
+    https://www.linkedin.com/jobs/view/<job_slug_or_id>/
+    Prevents malformed domain concatenation bugs (e.g., https://www.linkedin.comwww.linkedin.com).
+    """
+    if not url:
+        return "https://www.linkedin.com"
+        
+    url = url.strip("'\" ")
+    
+    # Extract currentJobId if present in query parameters
+    if "currentJobId" in url:
+        target_url = url if url.startswith("http") else f"https://{url}"
+        parsed = urllib.parse.urlparse(target_url)
+        query_params = urllib.parse.parse_qs(parsed.query)
+        if "currentJobId" in query_params and query_params["currentJobId"]:
+            job_id = query_params["currentJobId"][0]
+            return f"https://www.linkedin.com/jobs/view/{job_id}/"
+            
+    # Ensure URL scheme
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+        
+    parsed = urllib.parse.urlparse(url)
+    path = parsed.path
+    
+    # Strip any duplicate hostname prefixes embedded inside the path
+    while path.startswith("/www.linkedin.com") or path.startswith("www.linkedin.com"):
+        if path.startswith("/www.linkedin.com"):
+            path = path[len("/www.linkedin.com"):]
+        elif path.startswith("www.linkedin.com"):
+            path = path[len("www.linkedin.com"):]
+            
+    if not path.startswith("/"):
+        path = "/" + path
+        
+    return f"https://www.linkedin.com{path}"
+
+
 def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Dict[str, Any]:
     """
     Scrape job details from a specific LinkedIn job URL.
@@ -73,14 +113,8 @@ def scrape_job_details(url: str, li_at_cookie: Optional[str] = None) -> Dict[str
     return _run_in_thread(_scrape_job_details_inner, url, li_at_cookie)
 
 def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> Dict[str, Any]:
-    # Normalize URL (clean up tracking query parameters)
-    parsed_url = urllib.parse.urlparse(url)
-    clean_url = f"https://www.linkedin.com{parsed_url.path}"
-    if "currentJobId" in parsed_url.query:
-        query_params = urllib.parse.parse_qs(parsed_url.query)
-        if "currentJobId" in query_params:
-            job_id = query_params["currentJobId"][0]
-            clean_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+    # Normalize URL cleanly
+    clean_url = normalize_linkedin_url(url)
             
     result = {
         "url": clean_url,
@@ -333,12 +367,8 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                                 href = href_val
                                 break
                         
-                        if href and not href.startswith("http"):
-                            href = "https://www.linkedin.com" + href
-                            
                         if href:
-                            parsed = urllib.parse.urlparse(href)
-                            href = f"https://www.linkedin.com{parsed.path}"
+                            href = normalize_linkedin_url(href)
                             
                         # Get company
                         company_el = card.locator(".job-card-container__primary-description").first
@@ -392,8 +422,7 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                         href = link_el.get_attribute("href") if link_el.is_visible() else ""
                         
                         if href:
-                            parsed = urllib.parse.urlparse(href)
-                            href = f"https://www.linkedin.com{parsed.path}"
+                            href = normalize_linkedin_url(href)
                             
                             jobs.append({
                                 "title": title,

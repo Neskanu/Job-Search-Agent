@@ -3,6 +3,7 @@ import shutil
 import pytest
 from src.parser import save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to_json
 from src.agent import sanitize_filename
+from src.scraper import normalize_linkedin_url
 
 def test_parse_raw_cv_to_json():
     raw_text = "Jane Doe\njane@example.com | 555-0199\n\nSummary\nExperienced developer.\n\nSkills\nPython\nFastAPI"
@@ -10,6 +11,16 @@ def test_parse_raw_cv_to_json():
     assert data["name"] == "Jane Doe"
     assert "jane@example.com" in data["contact_info"]
     assert len(data["sections"]) > 0
+
+def test_normalize_linkedin_url():
+    bad_url1 = "https://www.linkedin.comwww.linkedin.com/jobs/view/mokym%C5%B3-specialistas-%C4%97-at-kitron-group-4439906348/"
+    assert normalize_linkedin_url(bad_url1) == "https://www.linkedin.com/jobs/view/mokym%C5%B3-specialistas-%C4%97-at-kitron-group-4439906348/"
+
+    bad_url2 = "www.linkedin.com/jobs/view/4439906348/"
+    assert normalize_linkedin_url(bad_url2) == "https://www.linkedin.com/jobs/view/4439906348/"
+
+    bad_url3 = "https://www.linkedin.com/jobs/search/?currentJobId=4439906348&keywords=Python"
+    assert normalize_linkedin_url(bad_url3) == "https://www.linkedin.com/jobs/view/4439906348/"
 
 # Test data representing a typical parsed CV
 DUMMY_CV = {
