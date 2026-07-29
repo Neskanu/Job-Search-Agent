@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from typing import Dict, Any, List
 from pypdf import PdfReader

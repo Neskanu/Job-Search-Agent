@@ -1,8 +1,15 @@
 import os
 import shutil
 import pytest
-from src.parser import save_cv_as_docx, save_cv_as_pdf
+from src.parser import save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to_json
 from src.agent import sanitize_filename
+
+def test_parse_raw_cv_to_json():
+    raw_text = "Jane Doe\njane@example.com | 555-0199\n\nSummary\nExperienced developer.\n\nSkills\nPython\nFastAPI"
+    data = parse_raw_cv_to_json(raw_text, "jane_cv.txt")
+    assert data["name"] == "Jane Doe"
+    assert "jane@example.com" in data["contact_info"]
+    assert len(data["sections"]) > 0
 
 # Test data representing a typical parsed CV
 DUMMY_CV = {

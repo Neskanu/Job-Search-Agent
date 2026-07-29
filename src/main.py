@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 # Ensure project root is in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf
+from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to_json
 from src.scraper import scrape_job_details, search_linkedin_jobs
 from src.agent import run_cv_tailoring_pipeline, sanitize_filename
 
