@@ -331,6 +331,55 @@ function logDebug(msg, isError = false) {
 }
 
 /**
+ * Display full-screen optimization overlay with step text & progress bar.
+ */
+function showOptimizingOverlay(stepText, progressPct = 35) {
+  const overlay = document.getElementById("optimizing-overlay");
+  const stepEl = document.getElementById("optimizing-overlay-step");
+  const barEl = document.getElementById("optimizing-progress-bar");
+  if (!overlay) return;
+  
+  overlay.classList.remove("hidden");
+  if (stepEl) stepEl.innerText = stepText;
+  if (barEl) barEl.style.width = `${progressPct}%`;
+}
+
+/**
+ * Hide full-screen optimization overlay.
+ */
+function hideOptimizingOverlay() {
+  const overlay = document.getElementById("optimizing-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+/**
+ * Show validation warning modal dialog on missing requirements.
+ */
+function showValidationModal(title, bodyText, iconSymbol = "⚠️", actionsHtml = null) {
+  const overlay = document.getElementById("validation-modal-overlay");
+  const titleEl = document.getElementById("validation-modal-title");
+  const bodyEl = document.getElementById("validation-modal-body");
+  const iconEl = document.getElementById("validation-modal-icon");
+  const actionsEl = document.getElementById("validation-modal-actions");
+  if (!overlay) return;
+
+  if (titleEl) titleEl.innerText = title;
+  if (bodyEl) bodyEl.innerText = bodyText;
+  if (iconEl) iconEl.innerText = iconSymbol;
+  if (actionsEl && actionsHtml) actionsEl.innerHTML = actionsHtml;
+
+  overlay.classList.remove("hidden");
+}
+
+/**
+ * Close validation warning modal.
+ */
+function closeValidationModal() {
+  const overlay = document.getElementById("validation-modal-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+/**
  * Enable/Disable tailoring orchestrator button based on upload and target state.
  */
 function checkTailorEnable() {
@@ -371,9 +420,13 @@ async function tailorResume() {
   // Check 1: CV Upload Validation
   if (!cvState.originalCvPath) {
     logDebug("❌ Validation Failed: No original CV uploaded.", true);
-    switchTab('upload');
     showToast("⚠️ Please upload your original CV first!", true);
-    alert("Missing CV: Please click Tab 1 ('Upload') and select your CV file (PDF or DOCX).");
+    showValidationModal(
+      "Original CV Missing",
+      "Please upload your original CV file (PDF or DOCX) in Tab 1 before optimizing.",
+      "📁",
+      `<button onclick="switchTab('upload'); closeValidationModal();" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">📂 Go to Upload Tab</button>`
+    );
     const uploadBox = document.getElementById("cv-file")?.closest("div");
     if (uploadBox) {
       uploadBox.classList.add("ring-4", "ring-rose-500");
@@ -386,9 +439,16 @@ async function tailorResume() {
   // Check 2: Target Job Validation
   if (!cvState.selectedJob) {
     logDebug("❌ Validation Failed: No target job selected or entered.", true);
-    switchTab('linkedin');
     showToast("⚠️ Please select a target job post first!", true);
-    alert("Missing Target Job: Please select a job from Tab 2 ('Search') or enter details in Tab 3 ('Manual').");
+    showValidationModal(
+      "Target Job Missing",
+      "Please select a job from Tab 2 ('Search') or enter job details in Tab 3 ('Manual').",
+      "🎯",
+      `<div class="flex gap-2 w-full">
+        <button onclick="switchTab('linkedin'); closeValidationModal();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">🔍 Search Jobs</button>
+        <button onclick="switchTab('manual'); closeValidationModal();" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg shadow-md">✍️ Manual Entry</button>
+       </div>`
+    );
     return;
   }
   logDebug(`✓ Target Job: ${cvState.selectedJob.title} at ${cvState.selectedJob.company}`);
@@ -421,14 +481,15 @@ async function tailorResume() {
 
   const btn = document.getElementById("btn-tailor-cv");
   const btnText = btn.querySelector("span");
-  btn.setAttribute("disabled", "true");
-  btnText.innerText = "Tailoring Resume (10-30s)...";
+  if (btnText) btnText.innerText = "Tailoring Resume (10-30s)...";
+
+  showOptimizingOverlay("Step 1/3: Reading CV & analyzing job requirements...", 25);
 
   // Check 4: Job Description Content
   let jobDesc = cvState.selectedJob.description;
   if (!jobDesc || jobDesc.trim().length === 0) {
     if (cvState.selectedJob.url && cvState.selectedJob.url.startsWith("http")) {
-      btnText.innerText = "Fetching Job Details...";
+      showOptimizingOverlay("Step 1/3: Scraper fetching full job posting details...", 35);
       logDebug(`Scraper fetching job details from: ${cvState.selectedJob.url}`);
       try {
         const cookie = document.getElementById("li-at-cookie")?.value;
@@ -452,9 +513,9 @@ async function tailorResume() {
     if (!jobDesc || jobDesc.trim().length === 0) {
       jobDesc = `Job Title: ${cvState.selectedJob.title}\nCompany: ${cvState.selectedJob.company}\nLocation: ${cvState.selectedJob.location || ''}`;
     }
-    btnText.innerText = "Tailoring Resume (10-30s)...";
   }
 
+  showOptimizingOverlay("Step 2/3: AI Agent tailoring experience & matching keywords...", 60);
   logDebug("Sending POST payload to /api/tailor-cv endpoint...");
 
   try {
@@ -479,6 +540,7 @@ async function tailorResume() {
       throw new Error(errMsg);
     }
 
+    showOptimizingOverlay("Step 3/3: Rebuilding PDF preview & Word documents...", 90);
     logDebug("✓ Backend API returned 200 OK. Updating state & WYSIWYG elements...");
 
     cvState.tailoredCvData = data.cv_data;
@@ -497,9 +559,10 @@ async function tailorResume() {
     logDebug("🎉 Optimization Complete! Tailored CV rendered successfully.");
   } catch (err) {
     logDebug(`❌ Pipeline Execution Error: ${err.message}`, true);
-    alert(`Tailoring Error: ${err.message}`);
+    showValidationModal("Optimization Error", err.message, "❌");
   } finally {
-    btnText.innerText = "Optimize Resume for Role";
+    hideOptimizingOverlay();
+    if (btnText) btnText.innerText = "Optimize Resume for Role";
     checkTailorEnable();
   }
 }
