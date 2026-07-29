@@ -42,13 +42,15 @@ function switchTab(tabId) {
  * Toggle LLM configuration input blocks based on provider select value.
  */
 function toggleLLMInputs() {
-  const provider = document.getElementById("llm-provider").value;
+  const provider = document.getElementById("llm-provider")?.value || "gemini";
   if (provider === "gemini") {
-    document.getElementById("gemini-inputs").classList.remove("hidden");
-    document.getElementById("ollama-inputs").classList.add("hidden");
+    document.getElementById("gemini-inputs")?.classList.remove("hidden");
+    document.getElementById("ollama-inputs")?.classList.add("hidden");
+    showToast("Selected Provider: Google Gemini API");
   } else {
-    document.getElementById("gemini-inputs").classList.add("hidden");
-    document.getElementById("ollama-inputs").classList.remove("hidden");
+    document.getElementById("gemini-inputs")?.classList.add("hidden");
+    document.getElementById("ollama-inputs")?.classList.remove("hidden");
+    showToast("Selected Provider: Ollama (Local LLM)");
   }
 }
 
@@ -144,10 +146,10 @@ async function uploadCVFile() {
  * Search jobs on LinkedIn via Playwright scraper API.
  */
 async function searchJobs() {
-  const keywords = document.getElementById("search-keywords").value;
-  const location = document.getElementById("search-location").value;
-  const limit = parseInt(document.getElementById("search-limit").value);
-  const cookie = document.getElementById("li-at-cookie").value;
+  const keywords = document.getElementById("search-keywords")?.value || "Python Developer";
+  const location = document.getElementById("search-location")?.value || "United States";
+  const limit = parseInt(document.getElementById("search-limit")?.value || "5");
+  const cookie = document.getElementById("li-at-cookie")?.value || "";
 
   const resultsDiv = document.getElementById("job-search-results");
   resultsDiv.innerHTML = `<div class="text-center py-4 text-xs text-slate-400">🔎 Launching browser & searching LinkedIn...</div>`;
@@ -202,8 +204,8 @@ async function searchJobs() {
  * Scrape a specific LinkedIn job posting by pasting the URL directly.
  */
 async function scrapeDirectJob() {
-  const url = document.getElementById("direct-job-url").value;
-  const cookie = document.getElementById("li-at-cookie").value;
+  const url = document.getElementById("direct-job-url")?.value || "";
+  const cookie = document.getElementById("li-at-cookie")?.value || "";
   if (!url) {
     alert("Please paste a LinkedIn job URL first.");
     return;
@@ -236,10 +238,10 @@ async function scrapeDirectJob() {
  * Select the job filled in manual form fields as target.
  */
 function selectManualJob() {
-  const title = document.getElementById("job-title").value;
-  const company = document.getElementById("job-company").value;
-  const desc = document.getElementById("job-desc").value;
-  const url = document.getElementById("direct-job-url").value || "Direct Entry";
+  const title = document.getElementById("job-title")?.value || "";
+  const company = document.getElementById("job-company")?.value || "";
+  const desc = document.getElementById("job-desc")?.value || "";
+  const url = document.getElementById("direct-job-url")?.value || "Direct Entry";
 
   if (!title || !desc) {
     alert("Please enter at least a Job Title and Job Description.");
