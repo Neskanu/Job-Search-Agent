@@ -570,23 +570,15 @@ async function tailorResume() {
     );
     return;
   }
-      "🎯",
-      `<div class="flex gap-2 w-full">
-        <button onclick="switchTab('linkedin'); closeValidationModal();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">🔍 Search Jobs</button>
-        <button onclick="switchTab('manual'); closeValidationModal();" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg shadow-md">✍️ Manual Entry</button>
-       </div>`
-    );
-    return;
-  }
   logDebug(`✓ Target Job: ${cvState.selectedJob.title} at ${cvState.selectedJob.company}`);
 
   // Check 3: LLM Provider Parameters
-  const provider = document.getElementById("llm-provider").value;
-  const additionalInfo = document.getElementById("additional-info").value;
+  const provider = document.getElementById("llm-provider")?.value || "gemini";
+  const additionalInfo = document.getElementById("additional-info")?.value || "";
 
   let llmConfig = {};
   if (provider === "gemini") {
-    const key = document.getElementById("gemini-key").value;
+    const key = document.getElementById("gemini-key")?.value || "";
     const model = getSelectedModel("gemini");
     logDebug(`✓ LLM Provider: Gemini | Model: ${model}`);
     if (!key) {
@@ -597,7 +589,7 @@ async function tailorResume() {
       gemini_model: model
     };
   } else {
-    const url = document.getElementById("ollama-url").value;
+    const url = document.getElementById("ollama-url")?.value || "http://localhost:11434";
     const model = getSelectedModel("ollama");
     logDebug(`✓ LLM Provider: Ollama | Host: ${url} | Model: ${model}`);
     llmConfig = {
@@ -607,7 +599,7 @@ async function tailorResume() {
   }
 
   const btn = document.getElementById("btn-tailor-cv");
-  const btnText = btn.querySelector("span");
+  const btnText = btn?.querySelector("span");
   if (btnText) btnText.innerText = "Tailoring Resume (10-30s)...";
 
   showOptimizingOverlay("Step 1/3: Reading CV & analyzing job requirements...", 25);
