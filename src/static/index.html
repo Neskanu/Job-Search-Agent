@@ -263,6 +263,42 @@
       </div>
     </div>
 
+    <!-- Optimization Success Summary Modal Overlay -->
+    <div id="optimization-summary-modal" class="absolute inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-6 hidden">
+      <div class="bg-[#0F172A] border border-[#334155] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-[#1E293B] pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🎉</span>
+            <h3 class="text-sm font-bold text-slate-100">Optimization Report Summary</h3>
+          </div>
+          <button type="button" onclick="closeSummaryModal()" class="text-slate-400 hover:text-slate-200 text-sm font-bold">✕</button>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="p-3 bg-[#1E293B] rounded-xl border border-[#334155] space-y-1">
+            <div class="text-slate-400">Target Role: <strong id="summary-job-title" class="text-rose-400">Python Engineer</strong></div>
+            <div class="text-slate-400">Company: <strong id="summary-company" class="text-slate-200">Google</strong></div>
+            <div class="text-slate-400">AI Model Used: <span id="summary-model" class="text-emerald-400 font-mono">gemini-2.5-flash</span></div>
+          </div>
+
+          <div class="space-y-1 pt-1">
+            <span class="font-semibold text-slate-300">✅ Changes & Enhancements Applied:</span>
+            <ul class="list-disc list-inside text-slate-400 space-y-1 pl-1 text-[11px]" id="summary-changes-list">
+              <li>Extracted key ATS keywords from job posting and aligned core skills.</li>
+              <li>Reformatted experience bullet points with action verbs & quantifiable metrics.</li>
+              <li>Rebuilt interactive WYSIWYG canvas elements in workspace.</li>
+              <li>Compiled downloadable PDF and Word (.docx) documents.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="downloadTailoredFile('pdf'); closeSummaryModal();" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow transition-all">📄 Download PDF</button>
+          <button type="button" onclick="downloadTailoredFile('docx'); closeSummaryModal();" class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition-all">📝 Download Word (.docx)</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Top sticky actions bar -->
     <header class="h-16 border-b border-slate-200 bg-white px-8 flex items-center justify-between shadow-sm">
       <div class="flex items-center gap-3">

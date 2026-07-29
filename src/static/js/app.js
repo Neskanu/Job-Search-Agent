@@ -463,6 +463,28 @@ function closeValidationModal() {
 }
 
 /**
+ * Display Optimization Success Summary Modal dialog detailing what was changed.
+ */
+function showOptimizationSummary(info) {
+  const modal = document.getElementById("optimization-summary-modal");
+  if (!modal) return;
+
+  if (document.getElementById("summary-job-title")) document.getElementById("summary-job-title").innerText = info.job_title || "Target Role";
+  if (document.getElementById("summary-company")) document.getElementById("summary-company").innerText = info.company || "Target Company";
+  if (document.getElementById("summary-model")) document.getElementById("summary-model").innerText = info.model || "gemini-2.5-flash";
+
+  modal.classList.remove("hidden");
+}
+
+/**
+ * Close Optimization Success Summary Modal dialog.
+ */
+function closeSummaryModal() {
+  const modal = document.getElementById("optimization-summary-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+/**
  * Enable/Disable tailoring orchestrator button based on upload and target state.
  */
 function checkTailorEnable() {
@@ -640,9 +662,21 @@ async function tailorResume() {
     refreshPDFPreview();
     saveAppStateToCache();
     logDebug("🎉 Optimization Complete! Tailored CV rendered successfully.");
+
+    // Display explicit Optimization Summary Modal detailing changes & downloads
+    showOptimizationSummary({
+      job_title: cvState.selectedJob.title,
+      company: cvState.selectedJob.company,
+      model: getSelectedModel(provider)
+    });
   } catch (err) {
     logDebug(`❌ Pipeline Execution Error: ${err.message}`, true);
-    showValidationModal("Optimization Error", err.message, "❌");
+    showValidationModal(
+      "Optimization Failed",
+      `The AI CV Tailoring pipeline encountered an error:\n\n${err.message}\n\nPlease check your API key, model selection, or server connection and try again.`,
+      "❌",
+      `<button onclick="closeValidationModal()" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow-md">Dismiss & Fix Issue</button>`
+    );
   } finally {
     hideOptimizingOverlay();
     if (btnText) btnText.innerText = "Optimize Resume for Role";
