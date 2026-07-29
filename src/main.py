@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import asyncio
 import urllib.parse
 from typing import List, Dict, Any, Optional
@@ -435,6 +436,40 @@ async def api_auto_apply(req: AutoApplyRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Auto-apply failed: {str(e)}")
 
+
+@app.get("/api/list-applications", summary="List past job application audit records")
+async def api_list_applications():
+    """
+    Scan data/applications/ for subdirectories containing result.json files
+    and return a list of past application records for the history panel.
+    Each record includes: company, job_url, status, submitted_at, step_reached.
+    """
+    apps_dir = "data/applications"
+    if not os.path.exists(apps_dir):
+        return {"applications": []}
+
+    applications = []
+    for entry in sorted(os.scandir(apps_dir), key=lambda e: e.stat().st_mtime, reverse=True):
+        if not entry.is_dir():
+            continue
+        result_path = os.path.join(entry.path, "result.json")
+        if not os.path.exists(result_path):
+            continue
+        try:
+            with open(result_path, encoding="utf-8") as f:
+                record = json.load(f)
+            applications.append({
+                "company": record.get("company", "Unknown"),
+                "job_url": record.get("job_url", ""),
+                "status": record.get("status", "unknown"),
+                "step_reached": record.get("step_reached", ""),
+                "submitted_at": record.get("submitted_at", ""),
+                "audit_dir": entry.path
+            })
+        except Exception:
+            pass  # Skip malformed records silently
+
+    return {"applications": applications}
 
 # ==========================================
 # 🌐 STATIC FILES SERVING (Frontend SPA)

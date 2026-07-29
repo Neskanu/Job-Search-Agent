@@ -181,15 +181,21 @@ async function searchJobs() {
       const isSelected = cvState.selectedJob && cvState.selectedJob.title === job.title && cvState.selectedJob.company === job.company;
       const card = document.createElement("div");
       card.className = "bg-[#0F172A] border border-[#334155] rounded-xl p-4 space-y-2 relative";
+      const isQueued = cvState.applyQueue && cvState.applyQueue.some(q => q.job_url === job.url);
       card.innerHTML = `
         <div class="text-xs font-bold text-slate-100">${job.title}</div>
         <div class="text-[11px] text-rose-400 font-medium">🏢 ${job.company}</div>
         <div class="text-[10px] text-slate-500">📍 ${job.location}</div>
         <div class="flex justify-between items-center mt-2 border-t border-[#1E293B] pt-2">
           <a href="${job.url}" target="_blank" class="text-[10px] text-slate-400 hover:underline">View Post 🔗</a>
-          <button onclick="selectJobByIndex(${idx})" class="job-card-select-btn ${isSelected ? 'bg-emerald-600 text-white font-bold shadow-sm' : 'bg-rose-600 hover:bg-rose-700 text-white font-bold'} text-[10px] px-3 py-1 rounded cursor-pointer transition-all">
-            ${isSelected ? '✔ Selected' : 'Select Job'}
-          </button>
+          <div class="flex gap-1.5 items-center">
+            <button onclick="toggleJobQueue(${idx})" id="queue-btn-${idx}" class="text-[10px] px-2.5 py-1 rounded transition-all font-semibold ${isQueued ? 'bg-violet-600 text-white' : 'bg-slate-700 hover:bg-violet-700 text-slate-300'}">
+              ${isQueued ? '✓ Queued' : '+ Queue'}
+            </button>
+            <button onclick="selectJobByIndex(${idx})" class="job-card-select-btn ${isSelected ? 'bg-emerald-600 text-white font-bold shadow-sm' : 'bg-rose-600 hover:bg-rose-700 text-white font-bold'} text-[10px] px-3 py-1 rounded cursor-pointer transition-all">
+              ${isSelected ? '✔ Selected' : 'Select Job'}
+            </button>
+          </div>
         </div>
       `;
       resultsDiv.appendChild(card);
@@ -1440,3 +1446,259 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+// =============================================================================
+// 🤖 AUTO-APPLY QUEUE MODULE
+// =============================================================================
+
+if (!cvState.applyQueue) cvState.applyQueue = [];
+
+let _applyQueueResults = [];
+let _applyCurrentResultIdx = 0;
+let _queueStopped = false;
+let _currentScreenshotIdx = 0;
+let _currentScreenshots = [];
+const SCREENSHOT_LABELS = [
+  'Contact Information', 'Resume Upload', 'Screening Qs (1)',
+  'Screening Qs (2)', 'Screening Qs (3)', 'Review Page', 'Submitted'
+];
+
+function updateQueueBadge() {
+  const count = cvState.applyQueue.length;
+  const badge = document.getElementById('queue-count-badge');
+  const btn = document.getElementById('btn-auto-apply-queue');
+  if (badge) badge.textContent = count;
+  if (btn) btn.classList.toggle('hidden', count === 0);
+}
+
+function toggleJobQueue(idx) {
+  const job = cvState.searchResults?.[idx];
+  if (!job) return;
+  const existing = cvState.applyQueue.findIndex(q => q.job_url === job.url);
+  if (existing >= 0) {
+    cvState.applyQueue.splice(existing, 1);
+    showToast(`Removed ${job.company} from queue`);
+  } else {
+    cvState.applyQueue.push({
+      job_url: job.url, job_title: job.title, company: job.company,
+      pdf_path: cvState.tailoredPdfPath || cvState.originalCvPath || '',
+      cover_letter: '', answers_override: {}
+    });
+    showToast(`Added ${job.company} to queue ✓`);
+  }
+  updateQueueBadge();
+  saveAppStateToCache();
+  const btn = document.getElementById(`queue-btn-${idx}`);
+  if (btn) {
+    const isNowQueued = existing < 0;
+    btn.textContent = isNowQueued ? '✓ Queued' : '+ Queue';
+    btn.className = `text-[10px] px-2.5 py-1 rounded transition-all font-semibold ${isNowQueued ? 'bg-violet-600 text-white' : 'bg-slate-700 hover:bg-violet-700 text-slate-300'}`;
+  }
+}
+
+function openQueueModal() {
+  renderQueueModal();
+  loadApplicationHistory();
+  document.getElementById('auto-apply-modal').classList.remove('hidden');
+}
+function closeQueueModal() { document.getElementById('auto-apply-modal').classList.add('hidden'); }
+function clearQueue() {
+  cvState.applyQueue = []; updateQueueBadge(); renderQueueModal(); saveAppStateToCache(); showToast('Queue cleared');
+}
+
+function renderQueueModal() {
+  const list = document.getElementById('queue-jobs-list');
+  const countBadge = document.getElementById('queue-modal-count');
+  if (!list) return;
+  if (countBadge) countBadge.textContent = `${cvState.applyQueue.length} job${cvState.applyQueue.length !== 1 ? 's' : ''}`;
+  if (cvState.applyQueue.length === 0) {
+    list.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">No jobs in queue yet.<br>Click <strong class="text-violet-400">+ Queue</strong> on any search result.</div>`;
+    return;
+  }
+  list.innerHTML = cvState.applyQueue.map((job, i) => `
+    <div class="bg-[#1E293B] border border-[#334155] rounded-xl p-4 space-y-3">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs font-bold text-slate-100">${job.job_title}</div>
+          <div class="text-[11px] text-violet-400 font-medium mt-0.5">🏢 ${job.company}</div>
+          <div class="text-[10px] text-slate-500 font-mono truncate max-w-xs mt-0.5">${job.job_url}</div>
+        </div>
+        <button onclick="removeFromQueue(${i})" class="text-slate-500 hover:text-red-400 text-xs ml-2 font-bold">✕</button>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">📄 Cover Letter</label>
+          <button onclick="generateCoverLetterForJob(${i})" id="cl-gen-btn-${i}" class="text-[10px] text-violet-400 hover:text-violet-300 font-semibold">✨ Generate with AI</button>
+        </div>
+        <textarea id="cover-letter-${i}" rows="5" onchange="updateQueueJobField(${i},'cover_letter',this.value)"
+          placeholder="Click Generate with AI or write your own..."
+          class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-300 text-[11px] p-2.5 focus:outline-none focus:border-violet-500 resize-none font-mono"
+        >${job.cover_letter || ''}</textarea>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">💬 Screening Overrides</label>
+          <button onclick="addAnswerOverride(${i})" class="text-[10px] text-rose-400 hover:text-rose-300">+ Add</button>
+        </div>
+        <div id="answers-override-${i}" class="space-y-1">${renderAnswerOverrides(i)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAnswerOverrides(queueIdx) {
+  const entries = Object.entries(cvState.applyQueue[queueIdx]?.answers_override || {});
+  if (!entries.length) return `<div class="text-[10px] text-slate-600 italic">No overrides — AI auto-detects from your CV.</div>`;
+  return entries.map(([q, a], ri) => `
+    <div class="flex gap-1">
+      <input value="${q.replace(/"/g,'&quot;')}" placeholder="Question" onchange="updateOverrideKey(${queueIdx},${ri},this.value)"
+        class="flex-1 bg-[#0F172A] border border-[#334155] rounded text-slate-300 text-[10px] p-1.5 focus:outline-none">
+      <input value="${a.replace(/"/g,'&quot;')}" placeholder="Answer" onchange="updateOverrideVal(${queueIdx},${ri},this.value)"
+        class="w-24 bg-[#0F172A] border border-[#334155] rounded text-slate-300 text-[10px] p-1.5 focus:outline-none">
+      <button onclick="removeOverride(${queueIdx},${ri})" class="text-slate-500 hover:text-red-400 text-xs px-1">✕</button>
+    </div>
+  `).join('');
+}
+
+function addAnswerOverride(qi) { if (cvState.applyQueue[qi]) { cvState.applyQueue[qi].answers_override['New question'] = 'Answer'; renderQueueModal(); } }
+function removeOverride(qi, ri) { const keys = Object.keys(cvState.applyQueue[qi].answers_override); delete cvState.applyQueue[qi].answers_override[keys[ri]]; renderQueueModal(); }
+function updateOverrideKey(qi, ri, nk) { const e = Object.entries(cvState.applyQueue[qi].answers_override); const v = e[ri][1]; delete cvState.applyQueue[qi].answers_override[e[ri][0]]; cvState.applyQueue[qi].answers_override[nk] = v; }
+function updateOverrideVal(qi, ri, nv) { const k = Object.keys(cvState.applyQueue[qi].answers_override)[ri]; cvState.applyQueue[qi].answers_override[k] = nv; }
+function removeFromQueue(idx) { cvState.applyQueue.splice(idx,1); updateQueueBadge(); renderQueueModal(); saveAppStateToCache(); }
+function updateQueueJobField(idx, field, value) { if (cvState.applyQueue[idx]) { cvState.applyQueue[idx][field] = value; saveAppStateToCache(); } }
+
+async function generateCoverLetterForJob(qi) {
+  const job = cvState.applyQueue[qi]; if (!job) return;
+  const btn = document.getElementById(`cl-gen-btn-${qi}`);
+  if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+  try {
+    const provider = document.getElementById('llm-provider')?.value || 'gemini';
+    const jobDesc = cvState.searchResults?.find(r => r.url === job.job_url)?.description || cvState.selectedJob?.description || '';
+    const resp = await fetch('/api/generate-cover-letter', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cv_data: cvState.tailoredCvData || cvState.parsedCvData || {}, job_description: jobDesc,
+        job_title: job.job_title, company: job.company, provider, llm_config: getLLMConfig() })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Generation failed');
+    const ta = document.getElementById(`cover-letter-${qi}`);
+    if (ta) ta.value = data.cover_letter;
+    cvState.applyQueue[qi].cover_letter = data.cover_letter;
+    saveAppStateToCache();
+    showToast(`✨ Cover letter generated for ${job.company}`);
+  } catch(err) { showToast(`❌ ${err.message}`); }
+  finally { if (btn) { btn.textContent = '✨ Generate with AI'; btn.disabled = false; } }
+}
+
+async function startAutoApplyQueue() {
+  if (!cvState.applyQueue.length) { showToast('Queue is empty'); return; }
+  const liAt = document.getElementById('li-at-cookie')?.value || '';
+  if (!liAt) { showToast('⚠️ Enter your li_at cookie first'); return; }
+  const btn = document.getElementById('btn-start-queue');
+  if (btn) { btn.textContent = '⏳ Running... Chromium is filling forms'; btn.disabled = true; }
+  _queueStopped = false; closeQueueModal();
+  showToast('🤖 Auto Apply started — browser opening...');
+  try {
+    const resp = await fetch('/api/auto-apply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_queue: cvState.applyQueue, li_at: liAt,
+        cv_data: cvState.tailoredCvData || cvState.parsedCvData || {}, dry_run: true })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Auto-apply failed');
+    _applyQueueResults = data.results || []; _applyCurrentResultIdx = 0;
+    if (!_applyQueueResults.length) { showToast('No results returned'); return; }
+    showToast(`✅ Dry run done — reviewing ${_applyQueueResults.length} job(s)`);
+    showConfirmModal(0);
+  } catch(err) { showToast(`❌ ${err.message}`); }
+  finally { if (btn) { btn.textContent = '🚀 Start Auto Apply (Dry Run — Preview Before Submit)'; btn.disabled = false; } }
+}
+
+function showConfirmModal(idx) {
+  const result = _applyQueueResults[idx]; if (!result) return;
+  const sub = document.getElementById('confirm-modal-subtitle');
+  if (sub) sub.textContent = `${result.company} • ${result.job_title} (${idx+1}/${_applyQueueResults.length})`;
+  _currentScreenshots = result.screenshots || []; _currentScreenshotIdx = 0; updateScreenshotCarousel();
+  const aDiv = document.getElementById('confirm-answers-table');
+  const entries = Object.entries(result.screening_answers || {});
+  if (aDiv) aDiv.innerHTML = entries.length
+    ? entries.map(([q,a]) => `<div class="flex gap-2 text-[10px] bg-[#1E293B] rounded px-2 py-1.5"><span class="text-slate-400 flex-1">${q}</span><span class="text-emerald-400 font-semibold shrink-0">${a}</span></div>`).join('')
+    : '<div class="text-[10px] text-slate-600 italic">No screening questions detected.</div>';
+  const sb = document.getElementById('btn-confirm-submit');
+  if (sb) {
+    if (['no_easy_apply','failed'].includes(result.status)) { sb.textContent = result.status === 'no_easy_apply' ? '⚠️ No Easy Apply — Skip' : '❌ Failed — Skip'; sb.onclick = skipCurrentJob; }
+    else { sb.textContent = '✅ Confirm & Submit Application'; sb.onclick = confirmAndSubmit; }
+  }
+  document.getElementById('apply-confirm-modal').classList.remove('hidden');
+}
+
+function updateScreenshotCarousel() {
+  const img = document.getElementById('confirm-screenshot-img');
+  const counter = document.getElementById('screenshot-counter');
+  const label = document.getElementById('confirm-screenshot-label');
+  if (!_currentScreenshots.length) { if(img) img.src=''; if(counter) counter.textContent='0/0'; if(label) label.textContent='No screenshots'; return; }
+  const path = _currentScreenshots[_currentScreenshotIdx];
+  if (img) img.src = `/api/download?path=${encodeURIComponent(path)}`;
+  if (counter) counter.textContent = `${_currentScreenshotIdx+1}/${_currentScreenshots.length}`;
+  if (label) label.textContent = `Step ${_currentScreenshotIdx+1}: ${SCREENSHOT_LABELS[_currentScreenshotIdx] || 'Form Step'}`;
+}
+function prevScreenshot() { if (_currentScreenshotIdx > 0) { _currentScreenshotIdx--; updateScreenshotCarousel(); } }
+function nextScreenshot() { if (_currentScreenshotIdx < _currentScreenshots.length-1) { _currentScreenshotIdx++; updateScreenshotCarousel(); } }
+
+async function confirmAndSubmit() {
+  const result = _applyQueueResults[_applyCurrentResultIdx];
+  const queueJob = cvState.applyQueue.find(j => j.job_url === result?.job_url);
+  if (!result || !queueJob) { skipCurrentJob(); return; }
+  const sb = document.getElementById('btn-confirm-submit');
+  if (sb) { sb.textContent = '⏳ Submitting...'; sb.disabled = true; }
+  try {
+    const liAt = document.getElementById('li-at-cookie')?.value || '';
+    const resp = await fetch('/api/auto-apply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_queue: [queueJob], li_at: liAt, cv_data: cvState.tailoredCvData || cvState.parsedCvData || {}, dry_run: false })
+    });
+    const data = await resp.json();
+    const ok = data.results?.[0]?.status === 'submitted';
+    showToast(ok ? `✅ Applied to ${result.company}!` : `⚠️ Submission may have failed`);
+    loadApplicationHistory();
+  } catch(err) { showToast(`❌ ${err.message}`); }
+  advanceConfirmQueue();
+}
+
+function skipCurrentJob() { showToast(`Skipped ${_applyQueueResults[_applyCurrentResultIdx]?.company}`); advanceConfirmQueue(); }
+function stopQueue() { _queueStopped = true; document.getElementById('apply-confirm-modal').classList.add('hidden'); showToast('🛑 Queue stopped'); }
+function advanceConfirmQueue() {
+  document.getElementById('apply-confirm-modal').classList.add('hidden');
+  _applyCurrentResultIdx++;
+  if (_queueStopped || _applyCurrentResultIdx >= _applyQueueResults.length) { showToast('Queue complete ✅'); return; }
+  setTimeout(() => showConfirmModal(_applyCurrentResultIdx), 600);
+}
+
+function toggleHistoryPanel() {
+  const panel = document.getElementById('application-history-panel');
+  const arrow = document.getElementById('history-toggle-arrow');
+  if (!panel) return;
+  const isHidden = panel.classList.toggle('hidden');
+  if (arrow) arrow.textContent = isHidden ? '▼' : '▲';
+  if (!isHidden) loadApplicationHistory();
+}
+
+async function loadApplicationHistory() {
+  const panel = document.getElementById('application-history-panel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  try {
+    const resp = await fetch('/api/list-applications');
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    if (!data.applications?.length) { panel.innerHTML = '<div class="text-[10px] text-slate-600 italic px-1 py-2">No applications yet.</div>'; return; }
+    const ICONS = { submitted:'✅', pending_confirmation:'🔍', failed:'❌', timeout:'⏱️', no_easy_apply:'⚠️', skipped:'⏭️', submit_failed:'❌' };
+    panel.innerHTML = data.applications.map(app => `
+      <div class="bg-[#0F172A] border border-[#334155] rounded-lg p-2.5 text-[10px] space-y-0.5">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-200">${app.company||'Unknown'}</span>
+          <span>${ICONS[app.status]||'❓'} <span class="text-slate-500">${app.status}</span></span>
+        </div>
+        <div class="text-slate-500">${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'Unknown'}</div>
+      </div>`).join('');
+  } catch { panel.innerHTML = '<div class="text-[10px] text-slate-600 italic px-1 py-2">No history found yet.</div>'; }
+}
