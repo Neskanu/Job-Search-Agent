@@ -8,6 +8,7 @@ const cvState = {
   originalCvPath: null,
   originalCvText: null,
   selectedJob: null,
+  searchResults: [],
   tailoredCvData: null,
   tailoredDocxPath: null,
   tailoredPdfPath: null,
@@ -116,6 +117,7 @@ async function uploadCVFile() {
     statusText.innerText = "Upload CV (PDF/DOCX)";
     showToast("CV uploaded and parsed successfully!");
     checkTailorEnable();
+    saveAppStateToCache();
   } catch (err) {
     statusText.innerText = "Upload CV (PDF/DOCX)";
     alert(`Upload Error: ${err.message}`);
@@ -155,6 +157,7 @@ async function searchJobs() {
       return;
     }
 
+    cvState.searchResults = data.jobs;
     // Render job cards list
     data.jobs.forEach((job, idx) => {
       const card = document.createElement("div");
@@ -165,7 +168,7 @@ async function searchJobs() {
         <div class="text-[10px] text-slate-500">📍 ${job.location}</div>
         <div class="flex justify-between items-center mt-2 border-t border-[#1E293B] pt-2">
           <a href="${job.url}" target="_blank" class="text-[10px] text-slate-400 hover:underline">View Post 🔗</a>
-          <button onclick='selectJob(${JSON.stringify(job)})' class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3 py-1 rounded">Select Job</button>
+          <button onclick="selectJobByIndex(${idx})" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3 py-1 rounded cursor-pointer">Select Job</button>
         </div>
       `;
       resultsDiv.appendChild(card);
@@ -234,6 +237,12 @@ function selectManualJob() {
   selectJob(job);
 }
 
+function selectJobByIndex(idx) {
+  if (cvState.searchResults && cvState.searchResults[idx]) {
+    selectJob(cvState.searchResults[idx]);
+  }
+}
+
 /**
  * Select target job and update console selection state.
  */
@@ -246,6 +255,7 @@ function selectJob(job) {
   
   showToast(`Selected Target: ${job.title} at ${job.company}`);
   checkTailorEnable();
+  saveAppStateToCache();
 }
 
 /**
@@ -264,7 +274,16 @@ function checkTailorEnable() {
  * Trigger CV tailoring LLM agent pipeline.
  */
 async function tailorResume() {
-  if (!cvState.originalCvPath || !cvState.selectedJob) return;
+  if (!cvState.originalCvPath) {
+    showToast("Please upload your original CV first (Tab 1).", true);
+    alert("Please upload your original CV first under Tab 1 ('Upload').");
+    return;
+  }
+  if (!cvState.selectedJob) {
+    showToast("Please select a target job first (Tab 2 or 3).", true);
+    alert("Please select a target job post under Tab 2 ('Search') or Tab 3 ('Manual').");
+    return;
+  }
 
   const provider = document.getElementById("llm-provider").value;
   const additionalInfo = document.getElementById("additional-info").value;
@@ -273,14 +292,14 @@ async function tailorResume() {
   let llmConfig = {};
   if (provider === "gemini") {
     const key = document.getElementById("gemini-key").value;
-    const model = document.getElementById("gemini-model").value;
+    const model = getSelectedModel("gemini");
     llmConfig = {
       gemini_api_key: key || null,
       gemini_model: model
     };
   } else {
     const url = document.getElementById("ollama-url").value;
-    const model = document.getElementById("ollama-model").value;
+    const model = getSelectedModel("ollama");
     llmConfig = {
       ollama_url: url,
       ollama_model: model
@@ -325,6 +344,7 @@ async function tailorResume() {
 
     showToast("CV tailored successfully! PDF/Word files generated.");
     refreshPDFPreview();
+    saveAppStateToCache();
   } catch (err) {
     alert(`Tailoring Error: ${err.message}`);
   } finally {
@@ -836,8 +856,165 @@ function refreshPDFPreview() {
   }
 }
 
-// Initialize default view mode on load
+/**
+ * Get selected model name from dropdown select or custom input text.
+ */
+function getSelectedModel(provider) {
+  const select = document.getElementById(`${provider}-model-select`);
+  const custom = document.getElementById(`${provider}-model-custom`);
+  if (!select) return provider === "gemini" ? "gemini-2.5-flash" : "llama3";
+  
+  if (select.value === "custom") {
+    return custom ? (custom.value.trim() || (provider === "gemini" ? "gemini-2.5-flash" : "llama3")) : "gemini-2.5-flash";
+  }
+  return select.value;
+}
+
+/**
+ * Toggle visibility of custom model text input.
+ */
+function toggleCustomModelInput(provider) {
+  const select = document.getElementById(`${provider}-model-select`);
+  const custom = document.getElementById(`${provider}-model-custom`);
+  if (!select || !custom) return;
+  
+  if (select.value === "custom") {
+    custom.classList.remove("hidden");
+  } else {
+    custom.classList.add("hidden");
+  }
+  saveAppStateToCache();
+}
+
+/**
+ * Save current application state to browser localStorage cache.
+ */
+function saveAppStateToCache() {
+  const stateToCache = {
+    originalCvPath: cvState.originalCvPath,
+    originalCvText: cvState.originalCvText,
+    selectedJob: cvState.selectedJob,
+    tailoredCvData: cvState.tailoredCvData,
+    tailoredDocxPath: cvState.tailoredDocxPath,
+    tailoredPdfPath: cvState.tailoredPdfPath,
+    theme: cvState.theme,
+    photo: cvState.photo,
+    
+    // Inputs
+    geminiKey: document.getElementById("gemini-key")?.value || "",
+    geminiModelSelect: document.getElementById("gemini-model-select")?.value || "gemini-2.5-flash",
+    geminiModelCustom: document.getElementById("gemini-model-custom")?.value || "",
+    ollamaUrl: document.getElementById("ollama-url")?.value || "http://localhost:11434",
+    ollamaModelSelect: document.getElementById("ollama-model-select")?.value || "llama3",
+    ollamaModelCustom: document.getElementById("ollama-model-custom")?.value || "",
+    llmProvider: document.getElementById("llm-provider")?.value || "gemini",
+    liAtCookie: document.getElementById("li-at-cookie")?.value || "",
+    searchKeywords: document.getElementById("search-keywords")?.value || "",
+    searchLocation: document.getElementById("search-location")?.value || "",
+    searchLimit: document.getElementById("search-limit")?.value || "5",
+    additionalInfo: document.getElementById("additional-info")?.value || "",
+    
+    // Loaded details
+    loadedFilename: document.getElementById("loaded-filename")?.innerText || "",
+    loadedCharsCount: document.getElementById("loaded-chars-count")?.innerText || "0",
+    cvDetailsVisible: !document.getElementById("cv-details-panel")?.classList.contains("hidden")
+  };
+  
+  localStorage.setItem("cv_app_cached_state", JSON.stringify(stateToCache));
+}
+
+/**
+ * Restore application state from browser localStorage cache on load.
+ */
+function loadAppStateFromCache() {
+  const cached = localStorage.getItem("cv_app_cached_state");
+  if (!cached) return;
+  
+  try {
+    const state = JSON.parse(cached);
+    
+    cvState.originalCvPath = state.originalCvPath || null;
+    cvState.originalCvText = state.originalCvText || null;
+    cvState.selectedJob = state.selectedJob || null;
+    cvState.tailoredCvData = state.tailoredCvData || null;
+    cvState.tailoredDocxPath = state.tailoredDocxPath || null;
+    cvState.tailoredPdfPath = state.tailoredPdfPath || null;
+    cvState.theme = state.theme || "minimalist";
+    cvState.photo = state.photo || null;
+    
+    if (document.getElementById("gemini-key")) document.getElementById("gemini-key").value = state.geminiKey || "";
+    if (document.getElementById("gemini-model-select")) {
+      document.getElementById("gemini-model-select").value = state.geminiModelSelect || "gemini-2.5-flash";
+      toggleCustomModelInput("gemini");
+    }
+    if (document.getElementById("gemini-model-custom")) document.getElementById("gemini-model-custom").value = state.geminiModelCustom || "";
+    if (document.getElementById("ollama-url")) document.getElementById("ollama-url").value = state.ollamaUrl || "http://localhost:11434";
+    if (document.getElementById("ollama-model-select")) {
+      document.getElementById("ollama-model-select").value = state.ollamaModelSelect || "llama3";
+      toggleCustomModelInput("ollama");
+    }
+    if (document.getElementById("ollama-model-custom")) document.getElementById("ollama-model-custom").value = state.ollamaModelCustom || "";
+    if (document.getElementById("llm-provider")) {
+      document.getElementById("llm-provider").value = state.llmProvider || "gemini";
+      toggleLLMInputs();
+    }
+    if (document.getElementById("li-at-cookie")) document.getElementById("li-at-cookie").value = state.liAtCookie || "";
+    if (document.getElementById("search-keywords")) document.getElementById("search-keywords").value = state.searchKeywords || "";
+    if (document.getElementById("search-location")) document.getElementById("search-location").value = state.searchLocation || "";
+    if (document.getElementById("search-limit")) document.getElementById("search-limit").value = state.searchLimit || "5";
+    if (document.getElementById("additional-info")) document.getElementById("additional-info").value = state.additionalInfo || "";
+    
+    if (document.getElementById("cv-theme-select")) {
+      document.getElementById("cv-theme-select").value = cvState.theme;
+    }
+    
+    if (cvState.selectedJob) {
+      document.getElementById("banner-job-title").innerText = cvState.selectedJob.title;
+      document.getElementById("banner-job-company").innerText = cvState.selectedJob.company;
+      document.getElementById("target-selection-banner").classList.remove("hidden");
+    }
+    
+    if (state.loadedFilename && cvState.originalCvPath) {
+      document.getElementById("loaded-filename").innerText = state.loadedFilename;
+      document.getElementById("loaded-chars-count").innerText = state.loadedCharsCount;
+    }
+    if (state.cvDetailsVisible && cvState.originalCvPath) {
+      document.getElementById("cv-details-panel").classList.remove("hidden");
+    }
+    
+    checkTailorEnable();
+    
+    if (cvState.tailoredCvData) {
+      renderWYSIWYG(cvState.tailoredCvData);
+      document.getElementById("download-actions-bar").classList.remove("hidden");
+      document.getElementById("resume-sheet").classList.remove("hidden");
+      document.getElementById("cv-empty-placeholder").classList.add("hidden");
+      refreshPDFPreview();
+    }
+  } catch (e) {
+    console.error("Failed to load cached state:", e);
+  }
+}
+
+// Initialize default view mode & load cached state on load
 document.addEventListener("DOMContentLoaded", () => {
+  loadAppStateFromCache();
+  
   const savedMode = localStorage.getItem("cv_view_mode") || "edit";
   setViewMode(savedMode);
+  
+  // Attach auto-save listeners on all sidebar inputs
+  const sidebarInputs = [
+    "gemini-key", "gemini-model-select", "gemini-model-custom",
+    "ollama-url", "ollama-model-select", "ollama-model-custom",
+    "llm-provider", "li-at-cookie", "search-keywords",
+    "search-location", "search-limit", "additional-info"
+  ];
+  sidebarInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input", saveAppStateToCache);
+      el.addEventListener("change", saveAppStateToCache);
+    }
+  });
 });
