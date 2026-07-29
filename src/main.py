@@ -48,28 +48,28 @@ app.add_middleware(
 # if validation fails, and document these schemas in the Swagger UI.
 
 class SearchRequest(BaseModel):
-    keywords: str = Field(..., example="Python Developer")
-    location: str = Field(..., example="United States")
-    limit: int = Field(default=5, ge=1, le=25, example=5)
+    keywords: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    location: str = Field(..., json_schema_extra={"example": "United States"})
+    limit: int = Field(default=5, ge=1, le=25, json_schema_extra={"example": 5})
     li_at_cookie: Optional[str] = Field(default=None, description="LinkedIn li_at session cookie")
 
 class ScrapeRequest(BaseModel):
-    url: str = Field(..., example="https://www.linkedin.com/jobs/view/123456789/")
+    url: str = Field(..., json_schema_extra={"example": "https://www.linkedin.com/jobs/view/123456789/"})
     li_at_cookie: Optional[str] = Field(default=None)
 
 class TailorRequest(BaseModel):
-    original_cv_path: str = Field(..., example="data/original_cv/my_cv.pdf")
-    job_description_text: str = Field(..., example="We are looking for a Python engineer...")
-    job_title: str = Field(..., example="Python Developer")
-    company: str = Field(..., example="Google")
-    provider: str = Field(..., example="gemini", description="Must be 'gemini' or 'ollama'")
-    llm_config: Dict[str, Any] = Field(..., example={"gemini_model": "gemini-2.5-flash"})
+    original_cv_path: str = Field(..., json_schema_extra={"example": "data/original_cv/my_cv.pdf"})
+    job_description_text: str = Field(..., json_schema_extra={"example": "We are looking for a Python engineer..."})
+    job_title: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    company: str = Field(..., json_schema_extra={"example": "Google"})
+    provider: str = Field(..., json_schema_extra={"example": "gemini"}, description="Must be 'gemini' or 'ollama'")
+    llm_config: Dict[str, Any] = Field(..., json_schema_extra={"example": {"gemini_model": "gemini-2.5-flash"}})
     additional_info: Optional[str] = Field(default=None)
 
 class GenerateDocsRequest(BaseModel):
     cv_data: Dict[str, Any] = Field(..., description="The fully updated JSON representation of the CV")
-    job_title: str = Field(..., example="Python Developer")
-    company: str = Field(..., example="Google")
+    job_title: str = Field(..., json_schema_extra={"example": "Python Developer"})
+    company: str = Field(..., json_schema_extra={"example": "Google"})
     theme: Optional[str] = Field(default="minimalist", description="CV layout style template theme")
 
 # ==========================================
