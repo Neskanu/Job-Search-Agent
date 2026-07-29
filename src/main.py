@@ -84,36 +84,94 @@ class GenerateDocsRequest(BaseModel):
 async def upload_cv(file: UploadFile = File(...)):
     """
     Uploads a CV file (PDF or DOCX), saves it to the local data directory,
-    and returns the extracted raw text along with the saved file path.
+    parses it into structured cv_data JSON, compiles a preview PDF, and returns the workspace state.
     """
-    # Verify file extension
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ['.pdf', '.docx', '.txt', '.md']:
         raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or MD.")
         
     os.makedirs("data/original_cv", exist_ok=True)
-    save_path = os.path.join("data/original_cv", file.filename)
+    save_path = os.path.join("data/original_cv", file.filename).replace("\\", "/")
     
-    # Save the file asynchronously
     try:
         content = await file.read()
-        # writing file to disk is blocking, so run it in thread pool
         await asyncio.to_thread(lambda: open(save_path, "wb").write(content))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
         
-    # Read CV text
     try:
-        # read_cv is blocking, so run it in thread pool
         cv_text = await asyncio.to_thread(read_cv, save_path)
+        cv_data = parse_raw_cv_to_json(cv_text, file.filename)
+        
+        # Compile a PDF preview for the uploaded document
+        base_name = os.path.splitext(file.filename)[0]
+        pdf_preview_path = os.path.join("data/original_cv", f"preview_{base_name}.pdf").replace("\\", "/")
+        await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_preview_path)
+        
         return {
             "success": True,
             "filename": file.filename,
             "file_path": save_path,
+            "pdf_path": pdf_preview_path,
+            "cv_data": cv_data,
             "text": cv_text
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse CV document: {str(e)}")
+
+
+@app.get("/api/list-cvs", summary="List stored original and tailored CVs")
+async def list_cvs():
+    """Returns lists of stored original CVs and previously generated tailored CVs."""
+    os.makedirs("data/original_cv", exist_ok=True)
+    os.makedirs("data/tailored_cvs", exist_ok=True)
+    
+    orig_files = []
+    for f in os.listdir("data/original_cv"):
+        if f.endswith(('.pdf', '.docx', '.txt', '.md')) and not f.startswith("preview_"):
+            orig_files.append({"name": f, "path": os.path.join("data/original_cv", f).replace("\\", "/")})
+            
+    tailored_files = []
+    for f in os.listdir("data/tailored_cvs"):
+        if f.endswith(('.pdf', '.docx')):
+            tailored_files.append({"name": f, "path": os.path.join("data/tailored_cvs", f).replace("\\", "/")})
+            
+    return {
+        "success": True,
+        "original_cvs": orig_files,
+        "tailored_cvs": tailored_files
+    }
+
+
+class LoadCVRequest(BaseModel):
+    path: str
+
+@app.post("/api/load-cv", summary="Load previously saved CV from disk")
+async def load_cv(request: LoadCVRequest):
+    """Loads a previously uploaded original CV or tailored CV from disk and parses it for WYSIWYG rendering."""
+    if not os.path.exists(request.path):
+        raise HTTPException(status_code=404, detail=f"File not found: {request.path}")
+        
+    try:
+        cv_text = await asyncio.to_thread(read_cv, request.path)
+        filename = os.path.basename(request.path)
+        cv_data = parse_raw_cv_to_json(cv_text, filename)
+        
+        pdf_path = request.path
+        if not request.path.lower().endswith(".pdf"):
+            pdf_path = os.path.splitext(request.path)[0] + "_preview.pdf"
+            await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_path)
+            
+        return {
+            "success": True,
+            "filename": filename,
+            "file_path": request.path,
+            "pdf_path": pdf_path,
+            "cv_data": cv_data,
+            "text": cv_text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load CV: {str(e)}")
 
 
 @app.post("/api/search-jobs", summary="Browse LinkedIn jobs")

@@ -114,10 +114,24 @@ async function uploadCVFile() {
     document.getElementById("loaded-chars-count").innerText = data.text.length;
     document.getElementById("cv-details-panel").classList.remove("hidden");
     
+    // Open CV in WYSIWYG canvas immediately on upload!
+    if (data.cv_data) {
+      cvState.tailoredCvData = data.cv_data;
+      renderWYSIWYG(data.cv_data);
+      document.getElementById("download-actions-bar").classList.remove("hidden");
+      document.getElementById("resume-sheet").classList.remove("hidden");
+      document.getElementById("cv-empty-placeholder").classList.add("hidden");
+    }
+    if (data.pdf_path) {
+      cvState.tailoredPdfPath = data.pdf_path;
+      refreshPDFPreview();
+    }
+
     statusText.innerText = "Upload CV (PDF/DOCX)";
-    showToast("CV uploaded and parsed successfully!");
+    showToast("CV uploaded and opened in canvas!");
     checkTailorEnable();
     saveAppStateToCache();
+    loadSavedCVList();
   } catch (err) {
     statusText.innerText = "Upload CV (PDF/DOCX)";
     alert(`Upload Error: ${err.message}`);
@@ -331,17 +345,86 @@ function logDebug(msg, isError = false) {
 }
 
 /**
- * Display full-screen optimization overlay with step text & progress bar.
+ * Fetch list of saved original & tailored CV files from backend and populate dropdowns.
  */
-function showOptimizingOverlay(stepText, progressPct = 35) {
-  const overlay = document.getElementById("optimizing-overlay");
-  const stepEl = document.getElementById("optimizing-overlay-step");
-  const barEl = document.getElementById("optimizing-progress-bar");
-  if (!overlay) return;
-  
-  overlay.classList.remove("hidden");
-  if (stepEl) stepEl.innerText = stepText;
-  if (barEl) barEl.style.width = `${progressPct}%`;
+async function loadSavedCVList() {
+  try {
+    const response = await fetch("/api/list-cvs");
+    const data = await response.json();
+    if (!data.success) return;
+
+    const origSelect = document.getElementById("select-saved-original-cv");
+    const tailoredSelect = document.getElementById("select-saved-tailored-cv");
+
+    if (origSelect) {
+      origSelect.innerHTML = `<option value="">-- Choose Original CV --</option>`;
+      data.original_cvs.forEach(file => {
+        const opt = document.createElement("option");
+        opt.value = file.path;
+        opt.innerText = file.name;
+        if (cvState.originalCvPath === file.path) opt.selected = true;
+        origSelect.appendChild(opt);
+      });
+    }
+
+    if (tailoredSelect) {
+      tailoredSelect.innerHTML = `<option value="">-- Choose Tailored CV --</option>`;
+      data.tailored_cvs.forEach(file => {
+        const opt = document.createElement("option");
+        opt.value = file.path;
+        opt.innerText = file.name;
+        if (cvState.tailoredPdfPath === file.path) opt.selected = true;
+        tailoredSelect.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.warn("Failed to load saved CV list:", err);
+  }
+}
+
+/**
+ * Load a chosen saved CV from disk and immediately display in canvas workspace.
+ */
+async function loadSelectedSavedCV(type) {
+  const selectId = type === "original" ? "select-saved-original-cv" : "select-saved-tailored-cv";
+  const path = document.getElementById(selectId)?.value;
+  if (!path) return;
+
+  logDebug(`Loading selected ${type} CV: ${path}`);
+  showToast("Loading CV into canvas...");
+
+  try {
+    const response = await fetch("/api/load-cv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to load CV.");
+
+    cvState.originalCvPath = data.file_path;
+    cvState.originalCvText = data.text;
+    cvState.tailoredCvData = data.cv_data;
+    if (data.pdf_path) cvState.tailoredPdfPath = data.pdf_path;
+
+    // Display loaded details
+    document.getElementById("loaded-filename").innerText = data.filename;
+    document.getElementById("loaded-chars-count").innerText = data.text.length;
+    document.getElementById("cv-details-panel").classList.remove("hidden");
+
+    renderWYSIWYG(data.cv_data);
+    document.getElementById("download-actions-bar").classList.remove("hidden");
+    document.getElementById("resume-sheet").classList.remove("hidden");
+    document.getElementById("cv-empty-placeholder").classList.add("hidden");
+
+    refreshPDFPreview();
+    checkTailorEnable();
+    saveAppStateToCache();
+    showToast(`Loaded ${data.filename} into canvas!`);
+  } catch (err) {
+    alert(`Load Error: ${err.message}`);
+  }
 }
 
 /**
@@ -1213,6 +1296,7 @@ function loadAppStateFromCache() {
 // Initialize default view mode & load cached state on load
 document.addEventListener("DOMContentLoaded", () => {
   loadAppStateFromCache();
+  loadSavedCVList();
   
   const savedMode = localStorage.getItem("cv_view_mode") || "edit";
   setViewMode(savedMode);

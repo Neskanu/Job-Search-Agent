@@ -61,6 +61,92 @@ def read_cv(file_path: str) -> str:
     else:
         raise ValueError(f"Unsupported file format: {ext}. Only PDF, DOCX, TXT, or MD are supported.")
 
+def parse_raw_cv_to_json(cv_text: str, filename: str = "") -> Dict[str, Any]:
+    """
+    Parse raw extracted CV text into structured cv_data dictionary for immediate WYSIWYG rendering.
+    """
+    lines = [line.strip() for line in cv_text.split('\n') if line.strip()]
+    if not lines:
+        return {
+            "name": "Candidate Name",
+            "contact_info": "email@example.com | Phone",
+            "sections": [
+                {"title": "Summary", "type": "text", "content": "Uploaded CV document."}
+            ]
+        }
+        
+    name = lines[0]
+    if len(name) > 40 or '@' in name or 'http' in name.lower():
+        base = os.path.splitext(filename)[0] if filename else "Candidate"
+        name = base.replace('_', ' ').replace('-', ' ').title()
+        
+    contact_parts = []
+    for line in lines[1:5]:
+        if '@' in line or re.search(r'\d{3}', line) or 'http' in line.lower() or 'linkedin' in line.lower():
+            contact_parts.append(line)
+            
+    contact_info = " | ".join(contact_parts) if contact_parts else (lines[1] if len(lines) > 1 else "")
+    
+    sections = []
+    current_section = None
+    
+    section_keywords = {
+        'summary': 'Summary',
+        'profile': 'Summary',
+        'experience': 'Professional Experience',
+        'employment': 'Professional Experience',
+        'work history': 'Professional Experience',
+        'education': 'Education',
+        'skills': 'Skills',
+        'projects': 'Projects',
+        'certifications': 'Certifications'
+    }
+    
+    body_lines = lines[1:] if len(lines) > 1 else lines
+    current_bullets = []
+    
+    for line in body_lines:
+        line_lower = line.lower()
+        matched_title = None
+        for kw, title in section_keywords.items():
+            if line_lower == kw or line_lower == f"{kw}:" or line_lower.startswith(f"{kw} "):
+                matched_title = title
+                break
+                
+        if matched_title:
+            if current_section:
+                if current_bullets:
+                    current_section["content"] = current_bullets
+                sections.append(current_section)
+            current_bullets = []
+            sec_type = "list" if matched_title == "Skills" else "text"
+            current_section = {"title": matched_title, "type": sec_type, "content": ""}
+        else:
+            if not current_section:
+                current_section = {"title": "Summary", "type": "text", "content": ""}
+                
+            if current_section["type"] == "text":
+                if current_section["content"]:
+                    current_section["content"] += " " + line
+                else:
+                    current_section["content"] = line
+            else:
+                current_bullets.append(line)
+                
+    if current_section:
+        if current_bullets:
+            current_section["content"] = current_bullets
+        sections.append(current_section)
+        
+    if not sections:
+        sections = [{"title": "CV Content", "type": "text", "content": cv_text[:1000]}]
+        
+    return {
+        "name": name,
+        "contact_info": contact_info,
+        "sections": sections
+    }
+
 def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist") -> None:
     """Save CV JSON data to a styled DOCX file."""
     doc = docx.Document()
