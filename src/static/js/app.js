@@ -246,7 +246,7 @@ function selectJobByIndex(idx) {
 /**
  * Select target job and update console selection state.
  */
-function selectJob(job) {
+async function selectJob(job) {
   cvState.selectedJob = job;
   
   document.getElementById("banner-job-title").innerText = job.title;
@@ -256,6 +256,29 @@ function selectJob(job) {
   showToast(`Selected Target: ${job.title} at ${job.company}`);
   checkTailorEnable();
   saveAppStateToCache();
+
+  // Automatically fetch full job description if missing
+  if (!job.description && job.url && job.url.startsWith("http")) {
+    const cookie = document.getElementById("li-at-cookie")?.value;
+    showToast(`Fetching description for ${job.title}...`);
+    try {
+      const response = await fetch("/api/scrape-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: job.url, li_at_cookie: cookie || null })
+      });
+      const data = await response.json();
+      if (data.success && data.description) {
+        cvState.selectedJob.description = data.description;
+        if (data.title) cvState.selectedJob.title = data.title;
+        if (data.company) cvState.selectedJob.company = data.company;
+        saveAppStateToCache();
+        showToast(`Job details loaded! Ready to optimize.`);
+      }
+    } catch (err) {
+      console.warn("Auto job scrape failed:", err);
+    }
+  }
 }
 
 /**
@@ -311,13 +334,42 @@ async function tailorResume() {
   btn.setAttribute("disabled", "true");
   btnText.innerText = "Tailoring Resume (10-30s)...";
 
+  // Ensure job description is present before sending to API
+  let jobDesc = cvState.selectedJob.description;
+  if (!jobDesc || jobDesc.trim().length === 0) {
+    if (cvState.selectedJob.url && cvState.selectedJob.url.startsWith("http")) {
+      btnText.innerText = "Fetching Job Details...";
+      try {
+        const cookie = document.getElementById("li-at-cookie")?.value;
+        const response = await fetch("/api/scrape-job", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: cvState.selectedJob.url, li_at_cookie: cookie || null })
+        });
+        const data = await response.json();
+        if (data.success && data.description) {
+          jobDesc = data.description;
+          cvState.selectedJob.description = jobDesc;
+          saveAppStateToCache();
+        }
+      } catch (err) {
+        console.warn("Fetch job desc on tailor failed:", err);
+      }
+    }
+    
+    if (!jobDesc || jobDesc.trim().length === 0) {
+      jobDesc = `Job Title: ${cvState.selectedJob.title}\nCompany: ${cvState.selectedJob.company}\nLocation: ${cvState.selectedJob.location || ''}`;
+    }
+    btnText.innerText = "Tailoring Resume (10-30s)...";
+  }
+
   try {
     const response = await fetch("/api/tailor-cv", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         original_cv_path: cvState.originalCvPath,
-        job_description_text: cvState.selectedJob.description,
+        job_description_text: jobDesc,
         job_title: cvState.selectedJob.title,
         company: cvState.selectedJob.company,
         provider: provider,
