@@ -313,6 +313,24 @@ async function selectJob(job) {
 }
 
 /**
+ * Print real-time diagnostic log message to console and UI Debug Status Panel.
+ */
+function logDebug(msg, isError = false) {
+  console.log(`[CV AGENT DEBUG] ${msg}`);
+  const panel = document.getElementById("debug-log-panel");
+  const content = document.getElementById("debug-log-content");
+  if (!panel || !content) return;
+  
+  panel.classList.remove("hidden");
+  const line = document.createElement("div");
+  const timestamp = new Date().toLocaleTimeString();
+  line.className = isError ? "text-rose-400 font-semibold" : "text-emerald-400";
+  line.innerText = `[${timestamp}] ${msg}`;
+  content.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+/**
  * Enable/Disable tailoring orchestrator button based on upload and target state.
  */
 function checkTailorEnable() {
@@ -326,9 +344,36 @@ function checkTailorEnable() {
  * Trigger CV tailoring LLM agent pipeline.
  */
 async function tailorResume() {
+  logDebug("🚀 Optimize Resume for Role initiated.");
+
+  // Auto-detect manually typed job in Tab 3 if selectedJob is not set
+  if (!cvState.selectedJob) {
+    const title = document.getElementById("job-title")?.value;
+    const desc = document.getElementById("job-desc")?.value;
+    const company = document.getElementById("job-company")?.value;
+    const url = document.getElementById("direct-job-url")?.value || "Direct Entry";
+    
+    if (title || desc) {
+      logDebug(`Auto-registering manual job entry: "${title || 'Target Role'}" at "${company || 'Target Company'}"`);
+      cvState.selectedJob = {
+        title: title || "Target Role",
+        company: company || "Target Company",
+        description: desc || `Job Title: ${title}`,
+        url: url
+      };
+      document.getElementById("banner-job-title").innerText = cvState.selectedJob.title;
+      document.getElementById("banner-job-company").innerText = cvState.selectedJob.company;
+      document.getElementById("target-selection-banner").classList.remove("hidden");
+      saveAppStateToCache();
+    }
+  }
+
+  // Check 1: CV Upload Validation
   if (!cvState.originalCvPath) {
+    logDebug("❌ Validation Failed: No original CV uploaded.", true);
     switchTab('upload');
     showToast("⚠️ Please upload your original CV first!", true);
+    alert("Missing CV: Please click Tab 1 ('Upload') and select your CV file (PDF or DOCX).");
     const uploadBox = document.getElementById("cv-file")?.closest("div");
     if (uploadBox) {
       uploadBox.classList.add("ring-4", "ring-rose-500");
@@ -336,20 +381,30 @@ async function tailorResume() {
     }
     return;
   }
+  logDebug(`✓ Original CV Path: ${cvState.originalCvPath}`);
+
+  // Check 2: Target Job Validation
   if (!cvState.selectedJob) {
+    logDebug("❌ Validation Failed: No target job selected or entered.", true);
     switchTab('linkedin');
     showToast("⚠️ Please select a target job post first!", true);
+    alert("Missing Target Job: Please select a job from Tab 2 ('Search') or enter details in Tab 3 ('Manual').");
     return;
   }
+  logDebug(`✓ Target Job: ${cvState.selectedJob.title} at ${cvState.selectedJob.company}`);
 
+  // Check 3: LLM Provider Parameters
   const provider = document.getElementById("llm-provider").value;
   const additionalInfo = document.getElementById("additional-info").value;
 
-  // Compile LLM parameters
   let llmConfig = {};
   if (provider === "gemini") {
     const key = document.getElementById("gemini-key").value;
     const model = getSelectedModel("gemini");
+    logDebug(`✓ LLM Provider: Gemini | Model: ${model}`);
+    if (!key) {
+      logDebug("⚠️ Warning: Gemini API key field is empty. Using server environment key fallback...", true);
+    }
     llmConfig = {
       gemini_api_key: key || null,
       gemini_model: model
@@ -357,6 +412,7 @@ async function tailorResume() {
   } else {
     const url = document.getElementById("ollama-url").value;
     const model = getSelectedModel("ollama");
+    logDebug(`✓ LLM Provider: Ollama | Host: ${url} | Model: ${model}`);
     llmConfig = {
       ollama_url: url,
       ollama_model: model
@@ -368,11 +424,12 @@ async function tailorResume() {
   btn.setAttribute("disabled", "true");
   btnText.innerText = "Tailoring Resume (10-30s)...";
 
-  // Ensure job description is present before sending to API
+  // Check 4: Job Description Content
   let jobDesc = cvState.selectedJob.description;
   if (!jobDesc || jobDesc.trim().length === 0) {
     if (cvState.selectedJob.url && cvState.selectedJob.url.startsWith("http")) {
       btnText.innerText = "Fetching Job Details...";
+      logDebug(`Scraper fetching job details from: ${cvState.selectedJob.url}`);
       try {
         const cookie = document.getElementById("li-at-cookie")?.value;
         const response = await fetch("/api/scrape-job", {
@@ -384,10 +441,11 @@ async function tailorResume() {
         if (data.success && data.description) {
           jobDesc = data.description;
           cvState.selectedJob.description = jobDesc;
+          logDebug("✓ Job details scraped successfully!");
           saveAppStateToCache();
         }
       } catch (err) {
-        console.warn("Fetch job desc on tailor failed:", err);
+        logDebug(`Auto-scrape warning: ${err.message}`, true);
       }
     }
     
@@ -396,6 +454,8 @@ async function tailorResume() {
     }
     btnText.innerText = "Tailoring Resume (10-30s)...";
   }
+
+  logDebug("Sending POST payload to /api/tailor-cv endpoint...");
 
   try {
     const response = await fetch("/api/tailor-cv", {
@@ -413,17 +473,20 @@ async function tailorResume() {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Tailoring failed.");
+    if (!response.ok) {
+      const errMsg = data.detail || JSON.stringify(data);
+      logDebug(`❌ Backend API Error (${response.status}): ${errMsg}`, true);
+      throw new Error(errMsg);
+    }
 
-    // Update global state with tailored data and file locations
+    logDebug("✓ Backend API returned 200 OK. Updating state & WYSIWYG elements...");
+
     cvState.tailoredCvData = data.cv_data;
     cvState.tailoredDocxPath = data.docx_path;
     cvState.tailoredPdfPath = data.pdf_path;
 
-    // Render WYSIWYG canvas
     renderWYSIWYG(data.cv_data);
 
-    // Show download bar and resume page sheet, hide empty state placeholder
     document.getElementById("download-actions-bar").classList.remove("hidden");
     document.getElementById("resume-sheet").classList.remove("hidden");
     document.getElementById("cv-empty-placeholder").classList.add("hidden");
@@ -431,7 +494,9 @@ async function tailorResume() {
     showToast("CV tailored successfully! PDF/Word files generated.");
     refreshPDFPreview();
     saveAppStateToCache();
+    logDebug("🎉 Optimization Complete! Tailored CV rendered successfully.");
   } catch (err) {
+    logDebug(`❌ Pipeline Execution Error: ${err.message}`, true);
     alert(`Tailoring Error: ${err.message}`);
   } finally {
     btnText.innerText = "Optimize Resume for Role";
@@ -1101,6 +1166,35 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el) {
       el.addEventListener("input", saveAppStateToCache);
       el.addEventListener("change", saveAppStateToCache);
+    }
+  });
+
+  // Auto-sync manual job form inputs to cvState.selectedJob
+  const manualInputs = ["job-title", "job-company", "job-desc", "direct-job-url"];
+  manualInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const autoSyncJob = () => {
+        const title = document.getElementById("job-title")?.value;
+        const company = document.getElementById("job-company")?.value;
+        const desc = document.getElementById("job-desc")?.value;
+        const url = document.getElementById("direct-job-url")?.value || "Direct Entry";
+        
+        if (title || desc) {
+          cvState.selectedJob = {
+            title: title || "Target Role",
+            company: company || "Target Company",
+            description: desc || `Job Title: ${title}`,
+            url: url
+          };
+          document.getElementById("banner-job-title").innerText = cvState.selectedJob.title;
+          document.getElementById("banner-job-company").innerText = cvState.selectedJob.company;
+          document.getElementById("target-selection-banner").classList.remove("hidden");
+          saveAppStateToCache();
+        }
+      };
+      el.addEventListener("input", autoSyncJob);
+      el.addEventListener("change", autoSyncJob);
     }
   });
 });
