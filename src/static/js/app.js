@@ -761,7 +761,30 @@ function renderWYSIWYG(cvData) {
   listContainer.innerHTML = "";
 
   if (Array.isArray(cvData.sections)) {
+    let currentPageCard = document.createElement("div");
+    currentPageCard.className = "a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-8 mb-6 relative space-y-6";
+    listContainer.appendChild(currentPageCard);
+
     cvData.sections.forEach((sec, sIdx) => {
+      // Split into Page 2 card after 2 major sections if total sections > 2
+      if (sIdx === 2 && cvData.sections.length > 2) {
+        const pageBreak = document.createElement("div");
+        pageBreak.className = "a4-page-break my-8 flex items-center justify-center relative select-none pointer-events-none";
+        pageBreak.innerHTML = `
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t-2 border-dashed border-slate-300"></div></div>
+          <div class="relative bg-slate-200 px-4 py-1 text-[10px] font-bold text-slate-600 uppercase tracking-widest rounded-full border border-slate-300 shadow-sm flex items-center gap-1.5 z-10">
+            <span>📄 PAGE 1 END</span>
+            <span class="text-slate-400">•</span>
+            <span class="text-rose-500 font-extrabold">PAGE 2 BEGINS</span>
+          </div>
+        `;
+        listContainer.appendChild(pageBreak);
+
+        currentPageCard = document.createElement("div");
+        currentPageCard.className = "a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-8 mb-6 relative space-y-6";
+        listContainer.appendChild(currentPageCard);
+      }
+
       const secEl = document.createElement("div");
       secEl.className = "draggable-section group/section";
       secEl.setAttribute("data-type", sec.type || "text");
@@ -823,7 +846,7 @@ function renderWYSIWYG(cvData) {
         }
         contentHTML += `</div>`;
         
-        // Append "+ Add Block" button for list blocks (always visible)
+        // Append "+ Add Block" button for list blocks
         contentHTML += `
           <div class="mt-3 flex gap-2">
             <button onclick="addBlockItem(this, '${sec.type}')" class="inline-flex items-center gap-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-all hover:scale-105 active:scale-95">
@@ -841,24 +864,8 @@ function renderWYSIWYG(cvData) {
         </div>
         ${contentHTML}
       `;
-      
-      // Insert visual A4 Page Break Divider after major sections (e.g. Experience) or after 2 sections for multi-page layout
-      if (sIdx === 1 && cvData.sections.length > 2) {
-        const pageBreak = document.createElement("div");
-        pageBreak.className = "a4-page-break my-10 flex items-center justify-center relative select-none pointer-events-none";
-        pageBreak.innerHTML = `
-          <div class="absolute inset-0 flex items-center"><div class="w-full border-t-2 border-dashed border-slate-300"></div></div>
-          <div class="relative bg-slate-100 px-4 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest rounded-full border border-slate-300 shadow-sm flex items-center gap-1.5">
-            <span>📄 Page 1 End</span>
-            <span class="text-slate-300">•</span>
-            <span class="text-rose-500">Page 2 Begins</span>
-          </div>
-        `;
-        listContainer.appendChild(secEl);
-        listContainer.appendChild(pageBreak);
-      } else {
-        listContainer.appendChild(secEl);
-      }
+
+      currentPageCard.appendChild(secEl);
     });
   }
 

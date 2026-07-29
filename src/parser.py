@@ -497,103 +497,103 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
     body_leading = 14
     body_color = colors.HexColor('#2D2D2D')
     
-    bullet_font = 'Helvetica'
+    bullet_font = u_reg
     bullet_size = 9.5
     bullet_leading = 13.5
     bullet_color = colors.HexColor('#2D2D2D')
     
     if theme == "executive":
-        font_regular = 'Helvetica'
-        font_bold = 'Helvetica-Bold'
-        font_italic = 'Helvetica-Oblique'
+        font_regular = u_reg
+        font_bold = u_bold
+        font_italic = u_ital
         
-        name_font = 'Times-Bold' # Elegant serif for name
+        name_font = u_bold
         name_color = colors.HexColor('#1E3A8A') # Navy
         name_align = TA_LEFT
         
         contact_color = colors.HexColor('#475569')
         contact_align = TA_LEFT
         
-        heading_font = 'Times-Bold'
+        heading_font = u_bold
         heading_color = colors.HexColor('#1E3A8A')
         heading_align = TA_LEFT
         heading_line_color = colors.HexColor('#3B82F6') # Blue line
         
     elif theme == "creative":
-        font_regular = 'Helvetica'
-        font_bold = 'Helvetica-Bold'
-        font_italic = 'Helvetica-Oblique'
+        font_regular = u_reg
+        font_bold = u_bold
+        font_italic = u_ital
         
-        name_font = 'Helvetica-Bold'
+        name_font = u_bold
         name_color = colors.HexColor('#0F766E') # Teal
         name_align = TA_LEFT
         
         contact_color = colors.HexColor('#0D9488')
         contact_align = TA_LEFT
         
-        heading_font = 'Helvetica-Bold'
+        heading_font = u_bold
         heading_color = colors.HexColor('#0F766E')
         heading_align = TA_LEFT
         heading_line_color = colors.HexColor('#14B8A6') # Teal accent line
         
     elif theme == "tech":
-        font_regular = 'Courier'
-        font_bold = 'Courier-Bold'
-        font_italic = 'Courier-Oblique'
+        font_regular = u_reg
+        font_bold = u_bold
+        font_italic = u_ital
         
-        name_font = 'Courier-Bold'
+        name_font = u_bold
         name_size = 18
         name_leading = 22
         name_color = colors.HexColor('#0F172A') # Charcoal
         name_align = TA_LEFT
         
-        contact_font = 'Courier'
+        contact_font = u_reg
         contact_color = colors.HexColor('#64748B')
         contact_align = TA_LEFT
         
-        heading_font = 'Courier-Bold'
+        heading_font = u_bold
         heading_size = 11
         heading_leading = 13
         heading_color = colors.HexColor('#0F172A')
         heading_align = TA_LEFT
         heading_line_color = colors.HexColor('#64748B')
         
-        body_font = 'Courier'
+        body_font = u_reg
         body_size = 9.5
         body_leading = 13
         body_color = colors.HexColor('#334155')
         
-        bullet_font = 'Courier'
+        bullet_font = u_reg
         bullet_size = 9
         bullet_leading = 12.5
         bullet_color = colors.HexColor('#334155')
         
     elif theme == "academic":
-        font_regular = 'Times-Roman'
-        font_bold = 'Times-Bold'
-        font_italic = 'Times-Italic'
+        font_regular = u_reg
+        font_bold = u_bold
+        font_italic = u_ital
         
-        name_font = 'Times-Bold'
+        name_font = u_bold
         name_size = 22
         name_leading = 26
         name_color = colors.HexColor('#000000')
         name_align = TA_CENTER
         
-        contact_font = 'Times-Roman'
+        contact_font = u_reg
         contact_color = colors.HexColor('#2D2D2D')
         contact_align = TA_CENTER
         
-        heading_font = 'Times-Bold'
+        heading_font = u_bold
         heading_color = colors.HexColor('#1A1A1A')
         heading_align = TA_CENTER
         heading_line_color = colors.HexColor('#1A1A1A')
         
-        body_font = 'Times-Roman'
+        body_font = u_reg
         body_size = 10.5
         body_leading = 14.5
         body_color = colors.HexColor('#1A1A1A')
         
-        bullet_font = 'Times-Roman'
+        bullet_font = u_reg
         bullet_size = 10
         bullet_leading = 14
         bullet_color = colors.HexColor('#1A1A1A')

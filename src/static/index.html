@@ -353,29 +353,31 @@
         </div>
 
         <!-- Resume Sheet Page Layout (A4/Letter proportions) -->
-        <div id="resume-sheet" class="hidden w-[680px] min-h-[880px] bg-white border border-slate-200 shadow-xl rounded-xl p-12 text-slate-800 text-left relative transition-all duration-300">
-          <!-- Header Profile -->
-          <div class="flex items-center gap-6 border-b border-slate-100 pb-4 mb-6" id="cv-header-container">
-            <!-- Photo Slot Placeholder -->
-            <div id="cv-photo-container" class="relative group/photo cursor-pointer shrink-0">
-              <img id="cv-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>" class="w-20 h-20 rounded-full object-cover border border-slate-200 shadow-sm" alt="Profile Photo">
-              <input type="file" id="cv-photo-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="uploadCVPhoto()">
-              <div class="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold pointer-events-none">Update</div>
-              <!-- Remove photo button -->
-              <button onclick="removeCVPhoto(event)" id="btn-remove-photo" class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md hidden transition-all hover:scale-110 z-20" title="Remove Photo">×</button>
-            </div>
-            <!-- Profile Text Details -->
-            <div class="flex-1 min-w-0" id="cv-header-text">
-              <h1 id="cv-name" contenteditable="true" class="text-2xl font-bold text-slate-900 tracking-tight mb-1">Candidate Name</h1>
-              <div id="cv-contact" contenteditable="true" class="text-xs text-slate-500 font-medium">
-                email@example.com  |  +1 234 567 8900  |  City, State
+        <div id="resume-sheet" class="hidden w-[680px] text-slate-800 text-left relative transition-all duration-300">
+          <div class="a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-10 mb-6 relative">
+            <!-- Header Profile -->
+            <div class="flex items-center gap-6 border-b border-slate-100 pb-4 mb-6" id="cv-header-container">
+              <!-- Photo Slot Placeholder -->
+              <div id="cv-photo-container" class="relative group/photo cursor-pointer shrink-0">
+                <img id="cv-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>" class="w-20 h-20 rounded-full object-cover border border-slate-200 shadow-sm" alt="Profile Photo">
+                <input type="file" id="cv-photo-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="uploadCVPhoto()">
+                <div class="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold pointer-events-none">Update</div>
+                <!-- Remove photo button -->
+                <button onclick="removeCVPhoto(event)" id="btn-remove-photo" class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md hidden transition-all hover:scale-110 z-20" title="Remove Photo">×</button>
+              </div>
+              <!-- Profile Text Details -->
+              <div class="flex-1 min-w-0" id="cv-header-text">
+                <h1 id="cv-name" contenteditable="true" class="text-2xl font-bold text-slate-900 tracking-tight mb-1">Candidate Name</h1>
+                <div id="cv-contact" contenteditable="true" class="text-xs text-slate-500 font-medium">
+                  email@example.com  |  +1 (555) 000-0000  |  City, Country
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Sortable sections container -->
-          <div id="sections-list" class="space-y-6">
-            <!-- Dynamically filled -->
+            <!-- Sortable sections container -->
+            <div id="sections-list" class="space-y-6">
+              <!-- Dynamically filled -->
+            </div>
           </div>
 
           <!-- Add Section trigger footer -->
@@ -414,6 +416,6 @@
   </main>
 
   <!-- JS App Handler -->
-  <script src="js/app.js?v=2.1.0"></script>
+  <script src="js/app.js?v=2.2.0"></script>
 </body>
 </html>
