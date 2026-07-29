@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -303,6 +304,7 @@ async def download_file(
         raise HTTPException(status_code=404, detail="Requested file not found on disk.")
         
     filename = os.path.basename(abs_path)
+    encoded_filename = urllib.parse.quote(filename)
     
     headers = {}
     if inline:
@@ -314,7 +316,8 @@ async def download_file(
         else:
             media_type = "application/octet-stream"
     else:
-        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        # RFC 5987 standard encoding for UTF-8 filenames in HTTP headers
+        headers["Content-Disposition"] = f'attachment; filename="{encoded_filename}"; filename*=UTF-8\'\'{encoded_filename}'
         media_type = "application/octet-stream"
         
     return FileResponse(

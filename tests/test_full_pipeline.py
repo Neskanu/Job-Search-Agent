@@ -120,3 +120,14 @@ def test_preview_downloads_and_js_integrity():
     ]
     for fn in required_fns:
         assert fn in js_code, f"Missing required frontend JS function: {fn}"
+
+def test_utf8_filename_download_header():
+    """Verify that downloading files with extended UTF-8 characters (e.g. Lithuanian ų) does not crash Starlette headers with UnicodeEncodeError."""
+    utf8_path = "data/original_cv/Vytautas_Jurgaitis_mokymų.pdf"
+    os.makedirs("data/original_cv", exist_ok=True)
+    with open(utf8_path, "wb") as f:
+        f.write(b"%PDF-1.4 test utf8 content")
+        
+    res = client.get(f"/api/download?path={utf8_path}")
+    assert res.status_code == 200
+    assert "attachment;" in res.headers["content-disposition"]
