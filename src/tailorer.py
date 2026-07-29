@@ -202,3 +202,87 @@ async def tailor_cv(
         return await tailor_cv_ollama(original_cv_text, job_description_text, job_title, company, api_url, model, additional_info)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+async def generate_cover_letter(
+    cv_data: Dict[str, Any],
+    job_description: str,
+    job_title: str,
+    company: str,
+    provider: str,
+    config: Dict[str, Any]
+) -> str:
+    """
+    Generate a concise, professional cover letter using the LLM.
+
+    Produces 3 paragraphs (max ~400 words, plain text, no formatting):
+      1. Why I'm excited about this specific role at the company
+      2. My most relevant experience that directly matches the job requirements
+      3. Closing / call to action
+
+    Args:
+        cv_data: Structured CV JSON (name, contact_info, sections...)
+        job_description: Full text of the job posting
+        job_title: Target job title
+        company: Target company name
+        provider: LLM provider name ("gemini" or "ollama")
+        config: Provider config dict (api_key, model name, etc.)
+
+    Returns:
+        Cover letter as a plain text string.
+    """
+    # Build a short CV summary for the prompt (name + summary section)
+    name = cv_data.get("name", "Candidate")
+    summary_text = ""
+    for sec in cv_data.get("sections", []):
+        if sec.get("type") == "text" and "summary" in sec.get("title", "").lower():
+            summary_text = str(sec.get("content", ""))
+            break
+
+    prompt = f"""You are a professional cover letter writer. Write a compelling, concise cover letter for the following application.
+
+Candidate name: {name}
+Target role: {job_title}
+Target company: {company}
+
+Candidate summary:
+{summary_text}
+
+Job description:
+{job_description[:2000]}
+
+INSTRUCTIONS:
+- Write exactly 3 paragraphs. No bullet points. Plain text only, no markdown.
+- Paragraph 1 (2-3 sentences): Express genuine enthusiasm for THIS specific role at {company}. Mention something specific from the job description.
+- Paragraph 2 (3-4 sentences): Highlight 2-3 concrete achievements from the candidate's background that directly match the job requirements. Be specific.
+- Paragraph 3 (2 sentences): Professional closing. Express interest in an interview.
+- Start with "Dear Hiring Team," and end with "Best regards,\\n{name}".
+- Maximum 380 words. Do NOT include any subject line, date, or address headers.
+"""
+
+    if provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            return f"Dear Hiring Team,\n\nI am excited to apply for the {job_title} position at {company}.\n\nBest regards,\n{name}"
+        api_key = config.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY", "")
+        model_name = config.get("gemini_model", "gemini-2.5-flash")
+        client = genai.Client(api_key=api_key)
+        response = await client.aio.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=600)
+        )
+        return response.text.strip()
+
+    elif provider == "ollama":
+        api_url = config.get("ollama_url", "http://localhost:11434")
+        model_name = config.get("ollama_model", "llama3")
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{api_url}/api/generate",
+                json={"model": model_name, "prompt": prompt, "stream": False}
+            )
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip()
+
+    return f"Dear Hiring Team,\n\nI am excited to apply for the {job_title} position at {company}.\n\nBest regards,\n{name}"
+

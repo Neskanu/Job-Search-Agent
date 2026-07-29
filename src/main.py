@@ -15,6 +15,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to_json
 from src.scraper import scrape_job_details, search_linkedin_jobs
 from src.agent import run_cv_tailoring_pipeline, sanitize_filename
+from src.tailorer import generate_cover_letter
+from src.applier import apply_to_job, apply_job_queue
 
 # ==========================================
 # 🚀 FastAPI INITIALIZATION
@@ -325,6 +327,114 @@ async def download_file(
         media_type=media_type,
         headers=headers
     )
+
+# ==========================================
+# 🚀 AUTO-APPLY ENDPOINTS
+# ==========================================
+
+class CoverLetterRequest(BaseModel):
+    """Request body for generating an AI cover letter."""
+    cv_data: Dict[str, Any]
+    job_description: str
+    job_title: str
+    company: str
+    provider: str = "gemini"
+    llm_config: Dict[str, Any] = {}
+
+
+class AutoApplyJob(BaseModel):
+    """A single job entry in the auto-apply queue."""
+    job_url: str
+    job_title: str
+    company: str
+    pdf_path: str
+    cover_letter: Optional[str] = ""
+    answers_override: Optional[Dict[str, str]] = {}
+
+
+class AutoApplyRequest(BaseModel):
+    """Request body for triggering the auto-apply queue."""
+    job_queue: List[AutoApplyJob]
+    li_at: str
+    cv_data: Dict[str, Any]
+    dry_run: bool = True  # Always True by default — must confirm before submitting
+
+
+@app.post("/api/generate-cover-letter", summary="Generate AI cover letter for a job")
+async def api_generate_cover_letter(req: CoverLetterRequest):
+    """
+    Use the configured LLM to generate a 3-paragraph, plain-text cover letter
+    tailored to the specific job description and candidate CV.
+    The user can edit the returned text before it is sent during auto-apply.
+    """
+    try:
+        cover_letter = await generate_cover_letter(
+            cv_data=req.cv_data,
+            job_description=req.job_description,
+            job_title=req.job_title,
+            company=req.company,
+            provider=req.provider,
+            config=req.llm_config
+        )
+        return {"success": True, "cover_letter": cover_letter}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cover letter generation failed: {str(e)}")
+
+
+@app.post("/api/auto-apply", summary="Run LinkedIn Easy Apply on a queue of jobs")
+async def api_auto_apply(req: AutoApplyRequest):
+    """
+    Processes a queue of LinkedIn Easy Apply jobs one by one using Playwright.
+
+    When dry_run=True (default): fills all form steps but stops before Submit.
+    Returns screenshots and form summary for user confirmation.
+
+    When dry_run=False: actually clicks Submit on each job.
+    Should only be called after the user reviews and confirms the dry-run results.
+    """
+    try:
+        os.makedirs("data/applications", exist_ok=True)
+
+        # Convert Pydantic models to plain dicts for applier module
+        job_queue_dicts = [
+            {
+                "job_url": job.job_url,
+                "job_title": job.job_title,
+                "company": job.company,
+                "pdf_path": job.pdf_path,
+                "cover_letter": job.cover_letter or "",
+                "answers_override": job.answers_override or {}
+            }
+            for job in req.job_queue
+        ]
+
+        # Run the queue in a background thread (Playwright is synchronous)
+        results = await asyncio.to_thread(
+            apply_job_queue,
+            job_queue_dicts,
+            req.cv_data,
+            req.li_at,
+            req.dry_run
+        )
+
+        # Strip large base64 screenshots from the JSON response summary
+        # (screenshots are available as files in data/applications/)
+        summary = []
+        for r in results:
+            summary.append({
+                k: v for k, v in r.items() if k != "screenshots_b64"
+            })
+
+        all_ok = all(r.get("success") for r in results)
+        return {
+            "success": all_ok,
+            "dry_run": req.dry_run,
+            "total_jobs": len(results),
+            "results": summary
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Auto-apply failed: {str(e)}")
+
 
 # ==========================================
 # 🌐 STATIC FILES SERVING (Frontend SPA)
