@@ -114,7 +114,9 @@ def test_preview_downloads_and_js_integrity():
         "function showOptimizationSummary",
         "function closeSummaryModal",
         "function tailorResume",
-        "function renderWYSIWYG"
+        "function renderWYSIWYG",
+        "function downloadFormat",
+        "function downloadTailoredFile"
     ]
     for fn in required_fns:
         assert fn in js_code, f"Missing required frontend JS function: {fn}"

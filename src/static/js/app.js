@@ -1020,6 +1020,13 @@ function downloadFormat(format) {
 }
 
 /**
+ * Alias for downloadFormat to support modal buttons.
+ */
+function downloadTailoredFile(format) {
+  downloadFormat(format);
+}
+
+/**
  * Upload CV profile image file, convert it to Base64, and sync.
  */
 function uploadCVPhoto() {
