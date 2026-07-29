@@ -832,7 +832,7 @@ function renderWYSIWYG(cvData) {
           </div>`;
       }
 
-      // Build section wrapper HTML containing sortable handles and Delete Section button (always visible)
+      // Build section wrapper HTML containing sortable handles and Delete Section button
       secEl.innerHTML = `
         <div class="drag-handle">☰</div>
         <div class="flex justify-between items-center border-b border-slate-100 pb-1 mb-2">
@@ -841,7 +841,24 @@ function renderWYSIWYG(cvData) {
         </div>
         ${contentHTML}
       `;
-      listContainer.appendChild(secEl);
+      
+      // Insert visual A4 Page Break Divider after major sections (e.g. Experience) or after 2 sections for multi-page layout
+      if (sIdx === 1 && cvData.sections.length > 2) {
+        const pageBreak = document.createElement("div");
+        pageBreak.className = "a4-page-break my-10 flex items-center justify-center relative select-none pointer-events-none";
+        pageBreak.innerHTML = `
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t-2 border-dashed border-slate-300"></div></div>
+          <div class="relative bg-slate-100 px-4 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest rounded-full border border-slate-300 shadow-sm flex items-center gap-1.5">
+            <span>📄 Page 1 End</span>
+            <span class="text-slate-300">•</span>
+            <span class="text-rose-500">Page 2 Begins</span>
+          </div>
+        `;
+        listContainer.appendChild(secEl);
+        listContainer.appendChild(pageBreak);
+      } else {
+        listContainer.appendChild(secEl);
+      }
     });
   }
 

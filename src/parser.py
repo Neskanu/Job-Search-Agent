@@ -13,6 +13,36 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+def register_unicode_pdf_fonts():
+    """
+    Registers TrueType Unicode fonts in ReportLab to properly render extended UTF-8 characters 
+    (such as Lithuanian ė, ų, š, ž, č, ę, į, Ū) without black box artifacts (■).
+    """
+    font_candidates = [
+        ("ArialUnicode", "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/ariali.ttf"),
+        ("CalibriUnicode", "C:/Windows/Fonts/calibri.ttf", "C:/Windows/Fonts/calibrib.ttf", "C:/Windows/Fonts/calibrii.ttf"),
+        ("SegoeUnicode", "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/segoeuii.ttf"),
+        ("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf")
+    ]
+    
+    for family, reg_path, bold_path, ital_path in font_candidates:
+        if os.path.exists(reg_path):
+            try:
+                pdfmetrics.registerFont(TTFont(family, reg_path))
+                b_name = family + "-Bold" if os.path.exists(bold_path) else family
+                i_name = family + "-Italic" if os.path.exists(ital_path) else family
+                if os.path.exists(bold_path):
+                    pdfmetrics.registerFont(TTFont(b_name, bold_path))
+                if os.path.exists(ital_path):
+                    pdfmetrics.registerFont(TTFont(i_name, ital_path))
+                return family, b_name, i_name
+            except Exception:
+                pass
+                
+    return 'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'
 
 def read_pdf(file_path: str) -> str:
     """Extract raw text from a PDF file."""
@@ -437,31 +467,32 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
     
     styles = getSampleStyleSheet()
     
-    # Set default values for theme
-    font_regular = 'Helvetica'
-    font_bold = 'Helvetica-Bold'
-    font_italic = 'Helvetica-Oblique'
+    # Set default values for theme using Unicode TrueType fonts
+    u_reg, u_bold, u_ital = register_unicode_pdf_fonts()
+    font_regular = u_reg
+    font_bold = u_bold
+    font_italic = u_ital
     
-    name_font = 'Helvetica-Bold'
+    name_font = u_bold
     name_size = 20
     name_leading = 24
     name_color = colors.HexColor('#1A1A1A')
     name_align = TA_CENTER
     
-    contact_font = 'Helvetica'
+    contact_font = u_reg
     contact_size = 9.5
     contact_leading = 12
     contact_color = colors.HexColor('#4A4A4A')
     contact_align = TA_CENTER
     
-    heading_font = 'Helvetica-Bold'
+    heading_font = u_bold
     heading_size = 12
     heading_leading = 14
     heading_color = colors.HexColor('#1A1A1A')
     heading_align = TA_LEFT
     heading_line_color = colors.HexColor('#CCCCCC')
     
-    body_font = 'Helvetica'
+    body_font = u_reg
     body_size = 10
     body_leading = 14
     body_color = colors.HexColor('#2D2D2D')
