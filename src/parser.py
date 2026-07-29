@@ -44,6 +44,56 @@ def register_unicode_pdf_fonts():
                 
     return 'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'
 
+
+def process_profile_photo(base64_data_url: str, size: int = 180, circle: bool = True) -> "io.BytesIO":
+    """
+    Decode a base64 photo data URL, auto-correct EXIF rotation, and optionally
+    apply a circular mask so the profile photo renders with rounded corners in
+    the exported PDF and DOCX files.
+
+    Args:
+        base64_data_url: Full data URL string (e.g. "data:image/jpeg;base64,...")
+        size: Target square pixel size for the output image (default 180px)
+        circle: If True, creates a circular mask (fully rounded corners)
+
+    Returns:
+        io.BytesIO buffer containing a PNG image ready for embedding.
+    """
+    import base64
+    import io
+    from PIL import Image, ImageOps, ImageDraw
+
+    # Strip the data URL header prefix
+    header, encoded = base64_data_url.split(",", 1)
+    img_bytes = base64.b64decode(encoded)
+    img = Image.open(io.BytesIO(img_bytes))
+
+    # Fix EXIF orientation (e.g. photos rotated 90° by phone cameras)
+    img = ImageOps.exif_transpose(img)
+
+    # Convert to RGBA so transparency works for circular mask
+    img = img.convert("RGBA")
+
+    # Resize to a perfect square via center-crop first, then resize
+    min_dim = min(img.width, img.height)
+    left = (img.width - min_dim) // 2
+    top = (img.height - min_dim) // 2
+    img = img.crop((left, top, left + min_dim, top + min_dim))
+    img = img.resize((size, size), Image.LANCZOS)
+
+    if circle:
+        # Create a circular mask and apply it
+        mask = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, size, size), fill=255)
+        img.putalpha(mask)
+
+    # Save as PNG to preserve alpha channel
+    output_buf = io.BytesIO()
+    img.save(output_buf, format="PNG")
+    output_buf.seek(0)
+    return output_buf
+
 def read_pdf(file_path: str) -> str:
     """Extract raw text from a PDF file."""
     if not os.path.exists(file_path):
@@ -255,11 +305,8 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
     image_buf = None
     if photo_data and "," in photo_data:
         try:
-            import base64
-            import io
-            header, encoded = photo_data.split(",", 1)
-            img_bytes = base64.b64decode(encoded)
-            image_buf = io.BytesIO(img_bytes)
+            # process_profile_photo auto-corrects EXIF rotation and applies a circular mask
+            image_buf = process_profile_photo(photo_data, size=200, circle=True)
         except Exception as img_err:
             print(f"Error parsing DOCX photo: {img_err}")
 
@@ -663,12 +710,9 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
     image_flowable = None
     if photo_data and "," in photo_data:
         try:
-            import base64
-            import io
             from reportlab.platypus import Image
-            header, encoded = photo_data.split(",", 1)
-            img_bytes = base64.b64decode(encoded)
-            img_buf = io.BytesIO(img_bytes)
+            # process_profile_photo auto-corrects EXIF rotation and applies a circular mask
+            img_buf = process_profile_photo(photo_data, size=200, circle=True)
             image_flowable = Image(img_buf, width=65, height=65)
             image_flowable.hAlign = 'CENTER'
         except Exception as img_err:
