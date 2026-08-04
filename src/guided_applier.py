@@ -788,6 +788,20 @@ def run_guided_apply_session(
 
                 # If portal_url is a LinkedIn job post, click Apply link smoothly
                 if "linkedin.com/jobs" in page.url.lower():
+                    print("[guided_applier] LinkedIn job page detected. Waiting for Apply button...")
+                    inject_overlay(page, "Locating Apply link on LinkedIn page...", 1, 4)
+
+                    try:
+                        page.wait_for_selector(
+                            "button.jobs-apply-button, a.jobs-apply-button, "
+                            "button:has-text('Apply'), a:has-text('Apply'), "
+                            "button:has-text('Easy Apply'), a:has-text('Easy Apply'), "
+                            "a[href*='apply']",
+                            timeout=6000
+                        )
+                    except Exception:
+                        pass
+
                     apply_btn = page.query_selector(
                         "button.jobs-apply-button, a.jobs-apply-button, "
                         "button:has-text('Apply'), a:has-text('Apply'), "
@@ -795,15 +809,18 @@ def run_guided_apply_session(
                         "a[href*='apply'], [data-automation-id='apply']"
                     )
 
-                    if apply_btn and apply_btn.is_visible():
+                    if apply_btn:
+                        print("[guided_applier] Found Apply button. Executing click...")
+                        inject_overlay(page, "Clicking Apply link to follow redirect...", 1, 4)
                         try:
                             pages_before = len(context.pages)
                             apply_btn.click()
-                            time.sleep(2.0)
+                            time.sleep(3.0)
 
                             if len(context.pages) > pages_before:
                                 page = context.pages[-1]
                                 page.wait_for_load_state("domcontentloaded", timeout=20000)
+                                print(f"[guided_applier] Redirected to active tab: {page.url}")
                         except Exception as apply_err:
                             print(f"[guided_applier] Apply click note: {apply_err}")
                             time.sleep(2.0)

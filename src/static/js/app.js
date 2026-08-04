@@ -2016,12 +2016,7 @@ function triggerGuidedApplyForJob(idx) {
 }
 
 async function startGuidedApply(portalUrl, company, jobTitle) {
-  const cvData = cvState.tailoredCvData || cvState.parsedCvData;
-  if (!cvData) {
-    showToast('⚠️ Please upload or parse a CV first');
-    return;
-  }
-
+  const cvData = cvState.tailoredCvData || cvState.parsedCvData || { name: "Applicant", sections: [] };
   const pdfPath = cvState.tailoredPdfPath || cvState.originalCvPath || '';
   const liAt = document.getElementById('li-at-cookie')?.value || '';
 
