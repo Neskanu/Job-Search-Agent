@@ -138,3 +138,22 @@ def test_api_answers_memory_endpoints(tmp_path):
     # 3. Verify GET returns updated memory
     verify_res = client.get("/api/answers-memory")
     assert verify_res.json()["years of experience with python"] == "8"
+
+
+def test_is_search_or_nav_field():
+    """Verify search and navigation inputs are correctly identified and skipped."""
+    from src.guided_applier import is_search_or_nav_field
+    from unittest.mock import MagicMock
+
+    el_search = MagicMock()
+    el_search.get_attribute.side_effect = lambda attr: "search" if attr in ("type", "name") else ""
+
+    assert is_search_or_nav_field(el_search, "Search") is True
+    assert is_search_or_nav_field(el_search, "Search Jobs") is True
+    assert is_search_or_nav_field(el_search, "Paieška") is True
+
+    el_normal = MagicMock()
+    el_normal.get_attribute.side_effect = lambda attr: "text" if attr == "type" else "first_name"
+
+    assert is_search_or_nav_field(el_normal, "First Name") is False
+

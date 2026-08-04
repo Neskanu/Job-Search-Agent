@@ -478,6 +478,59 @@ def derive_from_cv_heuristics(label: str, cv_data: Dict[str, Any]) -> Optional[s
     return None
 
 
+def is_search_or_nav_field(el, label: str) -> bool:
+    """Return True if element is a site search box, navigation bar input, or filter field."""
+    norm = normalize_label(label)
+    if norm in ("search", "search jobs", "search careers", "filter", "filter jobs", "ieskoti", "paieska", "query", "keywords"):
+        return True
+
+    try:
+        el_type = (el.get_attribute("type") or "").lower()
+        if el_type in ("search", "button", "reset"):
+            return True
+
+        for attr in ["name", "id", "placeholder", "aria-label", "class"]:
+            val = (el.get_attribute(attr) or "").lower()
+            if any(k in val for k in ["nav-search", "header-search", "site-search", "top-search", "search-input", "global-search", "searchbox"]):
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+def fill_element_robustly(el, value: str) -> None:
+    """
+    Fill input element robustly by focusing, setting value, dispatching input & change events,
+    and blurring so React/Angular/Vue reactive forms persist the typed value without clearing it.
+    """
+    val_str = str(value)
+    try:
+        tag = el.evaluate("el => el.tagName.toLowerCase()")
+        el_type = (el.get_attribute("type") or "").lower()
+
+        if tag == "select":
+            try: el.select_option(value=val_str)
+            except Exception: el.select_option(label=val_str)
+        elif el_type in ("checkbox", "radio"):
+            if val_str.lower() in ("yes", "true", "1") and not el.is_checked():
+                el.click()
+        else:
+            el.focus()
+            el.fill("")
+            time.sleep(0.1)
+            el.fill(val_str)
+            el.dispatch_event("input")
+            el.dispatch_event("change")
+            el.blur()
+    except Exception as e:
+        print(f"[guided_applier] Fill warning, fallback to direct fill: {e}")
+        try:
+            el.fill(val_str)
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Main Guided Application Orchestrator
 # ---------------------------------------------------------------------------
@@ -626,9 +679,16 @@ def run_guided_apply_session(
                         if not label:
                             continue
 
-                        # Check if already filled
+                        # Ignore site search bars, navigation header inputs, or filter queries
+                        if is_search_or_nav_field(el, label):
+                            continue
+
+                        # Skip if already filled in this session or has value
+                        if label in filled_fields and filled_fields[label]:
+                            continue
+
                         try:
-                            curr_val = el.input_value() if el.tag_name == "input" or el.tag_name == "textarea" else ""
+                            curr_val = el.input_value() if el.tag_name in ("input", "textarea") else ""
                             if curr_val and len(curr_val) > 0:
                                 continue
                         except Exception:
@@ -642,26 +702,12 @@ def run_guided_apply_session(
                             ans = derive_from_cv_heuristics(label, cv_data)
 
                         if ans:
-                            # Fill field
-                            try:
-                                tag = el.evaluate("el => el.tagName.toLowerCase()")
-                                el_type = el.get_attribute("type") or ""
-
-                                if tag == "select":
-                                    try: el.select_option(value=ans)
-                                    except Exception: el.select_option(label=ans)
-                                elif el_type in ("checkbox", "radio"):
-                                    if ans.lower() in ("yes", "true", "1") and not el.is_checked():
-                                        el.click()
-                                else:
-                                    el.fill(str(ans))
-
-                                filled_fields[label] = ans
-                                memory[normalize_label(label)] = str(ans)
-                                save_answers_memory(memory)
-                                time.sleep(0.4)
-                            except Exception as fill_err:
-                                print(f"[guided_applier] Could not fill {label}: {fill_err}")
+                            # Fill field robustly with reactive event dispatches
+                            fill_element_robustly(el, ans)
+                            filled_fields[label] = ans
+                            memory[normalize_label(label)] = str(ans)
+                            save_answers_memory(memory)
+                            time.sleep(0.4)
 
                         else:
                             # Pause on unknown field!
@@ -698,9 +744,9 @@ def run_guided_apply_session(
                                     user_ans = ACTIVE_SESSIONS[session_id].get("latest_user_answer")
 
                                 if user_ans and st == "running":
-                                    # Inject user provided answer
+                                    # Inject user provided answer robustly
                                     try:
-                                        el.fill(user_ans)
+                                        fill_element_robustly(el, user_ans)
                                         filled_fields[label] = user_ans
                                         if ACTIVE_SESSIONS[session_id].get("remember_answer", True):
                                             memory[normalize_label(label)] = user_ans
