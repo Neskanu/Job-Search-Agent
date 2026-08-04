@@ -228,6 +228,11 @@ async function searchJobs() {
         <div class="flex justify-between items-center mt-2 border-t border-[#1E293B] pt-2">
           <a href="${job.url}" target="_blank" class="text-[10px] text-slate-400 hover:underline">View Post 🔗</a>
           <div class="flex gap-1.5 items-center">
+            ${!job.easy_apply || (job.url && !job.url.includes('linkedin.com')) ? `
+              <button onclick="triggerGuidedApplyForJob(${idx})" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-2.5 py-1 rounded transition-all cursor-pointer">
+                🌐 Guided Apply
+              </button>
+            ` : ''}
             <button onclick="toggleJobQueue(${idx})" id="queue-btn-${idx}" class="text-[10px] px-2.5 py-1 rounded transition-all font-semibold ${isQueued ? 'bg-violet-600 text-white' : 'bg-slate-700 hover:bg-violet-700 text-slate-300'}">
               ${isQueued ? '✓ Queued' : '+ Queue'}
             </button>
@@ -1859,4 +1864,247 @@ async function loadApplicationHistory() {
         <div class="text-slate-500">${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'Unknown'}</div>
       </div>`).join('');
   } catch { panel.innerHTML = '<div class="text-[10px] text-slate-600 italic px-1 py-2">No history found yet.</div>'; }
+}
+
+// =============================================================================
+// 🌐 GUIDED EXTERNAL PORTAL APPLY & ANSWERS MEMORY MODULE
+// =============================================================================
+
+let _activeGuidedSessionId = null;
+let _guidedPollInterval = null;
+let _currentAnswersMemory = {};
+
+async function openAnswersMemoryModal() {
+  await loadAnswersMemoryToModal();
+  document.getElementById('answers-memory-modal').classList.remove('hidden');
+}
+
+function closeAnswersMemoryModal() {
+  document.getElementById('answers-memory-modal').classList.add('hidden');
+}
+
+async function loadAnswersMemoryToModal() {
+  try {
+    const resp = await fetch('/api/answers-memory');
+    if (!resp.ok) throw new Error('Failed to load answers memory');
+    _currentAnswersMemory = await resp.json();
+    renderAnswersMemoryList();
+  } catch (err) {
+    showToast(`❌ Error loading answers memory: ${err.message}`);
+  }
+}
+
+function renderAnswersMemoryList() {
+  const container = document.getElementById('answers-memory-list');
+  if (!container) return;
+  const entries = Object.entries(_currentAnswersMemory);
+
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="text-xs text-slate-500 italic">No answers stored yet. Click + Add Custom Answer below.</div>';
+    return;
+  }
+
+  container.innerHTML = entries.map(([key, val], idx) => `
+    <div class="flex gap-2 items-center">
+      <input type="text" value="${key.replace(/"/g, '&quot;')}" onchange="updateMemoryKey(${idx}, this.value)" placeholder="Field Label (e.g. Years of Python)" class="flex-1 bg-[#1E293B] border border-[#334155] rounded-lg text-slate-200 text-xs p-2 focus:outline-none focus:border-rose-500">
+      <input type="text" value="${val.replace(/"/g, '&quot;')}" onchange="updateMemoryVal(${idx}, this.value)" placeholder="Stored Answer" class="flex-1 bg-[#1E293B] border border-[#334155] rounded-lg text-slate-200 text-xs p-2 focus:outline-none focus:border-rose-500">
+      <button type="button" onclick="removeMemoryRow(${idx})" class="text-slate-500 hover:text-red-400 text-xs font-bold px-1.5">✕</button>
+    </div>
+  `).join('');
+}
+
+function updateMemoryKey(idx, newKey) {
+  const entries = Object.entries(_currentAnswersMemory);
+  if (!entries[idx]) return;
+  const val = entries[idx][1];
+  delete _currentAnswersMemory[entries[idx][0]];
+  _currentAnswersMemory[newKey] = val;
+}
+
+function updateMemoryVal(idx, newVal) {
+  const entries = Object.entries(_currentAnswersMemory);
+  if (!entries[idx]) return;
+  _currentAnswersMemory[entries[idx][0]] = newVal;
+}
+
+function addAnswersMemoryRow() {
+  _currentAnswersMemory["New Question Label"] = "Answer";
+  renderAnswersMemoryList();
+}
+
+function removeMemoryRow(idx) {
+  const entries = Object.entries(_currentAnswersMemory);
+  if (entries[idx]) {
+    delete _currentAnswersMemory[entries[idx][0]];
+    renderAnswersMemoryList();
+  }
+}
+
+async function saveAnswersMemoryFromModal() {
+  try {
+    const resp = await fetch('/api/answers-memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memory: _currentAnswersMemory })
+    });
+    if (!resp.ok) throw new Error('Failed to save memory');
+    showToast('💾 Answers memory saved successfully!');
+    closeAnswersMemoryModal();
+  } catch (err) {
+    showToast(`❌ Save error: ${err.message}`);
+  }
+}
+
+function triggerGuidedApplyForJob(idx) {
+  const job = cvState.searchResults?.[idx] || cvState.selectedJob;
+  if (!job) return;
+  startGuidedApply(job.url, job.company, job.title);
+}
+
+async function startGuidedApply(portalUrl, company, jobTitle) {
+  const cvData = cvState.tailoredCvData || cvState.parsedCvData;
+  if (!cvData) {
+    showToast('⚠️ Please upload or parse a CV first');
+    return;
+  }
+
+  const pdfPath = cvState.tailoredPdfPath || cvState.originalCvPath || '';
+  const liAt = document.getElementById('li-at-cookie')?.value || '';
+
+  document.getElementById('guided-modal-company').textContent = `${company} • ${jobTitle}`;
+  document.getElementById('guided-status-text').textContent = 'Status: Initializing browser...';
+  document.getElementById('guided-last-action').textContent = 'Launching Chromium visible browser session...';
+  document.getElementById('guided-paused-container').classList.add('hidden');
+  document.getElementById('guided-apply-modal').classList.remove('hidden');
+
+  try {
+    const resp = await fetch('/api/guided-apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        portal_url: portalUrl,
+        company: company,
+        job_title: jobTitle,
+        cv_data: cvData,
+        pdf_path: pdfPath,
+        li_at: liAt
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Start failed');
+
+    _activeGuidedSessionId = data.session_id;
+    showToast(`🌐 Guided Apply session started for ${company}`);
+    startGuidedPolling();
+
+  } catch (err) {
+    showToast(`❌ Guided apply error: ${err.message}`);
+  }
+}
+
+function startGuidedPolling() {
+  if (_guidedPollInterval) clearInterval(_guidedPollInterval);
+  _guidedPollInterval = setInterval(pollGuidedApplyStatus, 2000);
+}
+
+async function pollGuidedApplyStatus() {
+  if (!_activeGuidedSessionId) return;
+
+  try {
+    const resp = await fetch(`/api/guided-apply-status?session_id=${encodeURIComponent(_activeGuidedSessionId)}`);
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    document.getElementById('guided-status-text').textContent = `Status: ${data.status.toUpperCase()} (Step ${data.current_step}/${data.total_steps})`;
+    document.getElementById('guided-last-action').textContent = data.last_action || 'Processing...';
+
+    if (data.status === 'paused' && data.paused_field) {
+      renderGuidedPausedField(data.paused_field);
+    } else {
+      document.getElementById('guided-paused-container').classList.add('hidden');
+    }
+
+    if (data.status === 'completed') {
+      clearInterval(_guidedPollInterval);
+      showToast(`🎉 Guided Apply completed for ${data.company}!`);
+      loadApplicationHistory();
+    } else if (data.status === 'failed') {
+      clearInterval(_guidedPollInterval);
+      showToast(`❌ Guided Apply failed: ${data.last_action}`);
+    }
+
+  } catch (err) {
+    console.warn("Guided status poll error:", err);
+  }
+}
+
+function renderGuidedPausedField(pausedField) {
+  const container = document.getElementById('guided-paused-container');
+  const img = document.getElementById('guided-field-screenshot');
+  const labelEl = document.getElementById('guided-field-label');
+  const inputWrapper = document.getElementById('guided-field-input-wrapper');
+
+  container.classList.remove('hidden');
+  img.src = pausedField.screenshot_b64 || '';
+  labelEl.textContent = pausedField.label;
+
+  if (pausedField.field_type === 'captcha') {
+    inputWrapper.innerHTML = `
+      <p class="text-xs text-rose-300 bg-rose-950/60 p-2.5 rounded-lg border border-rose-800">
+        Please complete the CAPTCHA inside the visible Chromium browser window, then click <strong>Resume →</strong> below.
+      </p>
+    `;
+    return;
+  }
+
+  if (pausedField.options && pausedField.options.length > 0) {
+    inputWrapper.innerHTML = `
+      <select id="guided-user-input" class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
+        ${pausedField.options.map(opt => `<option value="${opt.replace(/"/g, '&quot;')}">${opt}</option>`).join('')}
+      </select>
+    `;
+  } else {
+    inputWrapper.innerHTML = `
+      <input type="text" id="guided-user-input" placeholder="Type your answer..." class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
+    `;
+  }
+}
+
+async function submitGuidedAnswer() {
+  if (!_activeGuidedSessionId) return;
+
+  const labelEl = document.getElementById('guided-field-label');
+  const inputEl = document.getElementById('guided-user-input');
+  const rememberCheckbox = document.getElementById('guided-remember-checkbox');
+
+  const answer = inputEl ? inputEl.value : 'Done';
+  const label = labelEl ? labelEl.textContent : '';
+  const remember = rememberCheckbox ? rememberCheckbox.checked : true;
+
+  try {
+    const resp = await fetch('/api/answer-field', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: _activeGuidedSessionId,
+        field_label: label,
+        answer: answer,
+        remember: remember
+      })
+    });
+
+    if (!resp.ok) throw new Error('Failed to submit answer');
+
+    document.getElementById('guided-paused-container').classList.add('hidden');
+    showToast('Answer submitted! Resuming session...');
+
+  } catch (err) {
+    showToast(`❌ Error submitting answer: ${err.message}`);
+  }
+}
+
+function closeGuidedApplyModal() {
+  if (_guidedPollInterval) clearInterval(_guidedPollInterval);
+  document.getElementById('guided-apply-modal').classList.add('hidden');
 }

@@ -18,6 +18,14 @@ from src.scraper import scrape_job_details, search_linkedin_jobs
 from src.agent import run_cv_tailoring_pipeline, sanitize_filename
 from src.tailorer import generate_cover_letter
 from src.applier import apply_to_job, apply_job_queue
+from src.guided_applier import (
+    load_answers_memory,
+    save_answers_memory,
+    start_guided_apply,
+    load_session,
+    ACTIVE_SESSIONS,
+    ACTIVE_SESSIONS_LOCK
+)
 
 # ==========================================
 # 🚀 FastAPI INITIALIZATION
@@ -475,6 +483,95 @@ async def api_list_applications():
             pass  # Skip malformed records silently
 
     return {"applications": applications}
+
+
+# ==========================================
+# 🌐 GUIDED PORTAL APPLY ENDPOINTS
+# ==========================================
+
+class AnswersMemoryUpdate(BaseModel):
+    memory: Dict[str, str]
+
+class GuidedApplyRequest(BaseModel):
+    portal_url: str
+    company: str = "Company"
+    job_title: str = "Role"
+    cv_data: Dict[str, Any]
+    pdf_path: str = ""
+    cover_letter: Optional[str] = ""
+    li_at: Optional[str] = ""
+
+class AnswerFieldRequest(BaseModel):
+    session_id: str
+    field_label: str
+    answer: str
+    remember: bool = True
+
+
+@app.get("/api/answers-memory", summary="Get stored answers memory dictionary")
+async def api_get_answers_memory():
+    """Return persistent answers memory key-value pairs."""
+    return load_answers_memory()
+
+
+@app.post("/api/answers-memory", summary="Update answers memory dictionary")
+async def api_save_answers_memory(req: AnswersMemoryUpdate):
+    """Save user-edited answers memory dictionary."""
+    save_answers_memory(req.memory)
+    return {"success": True, "message": "Answers memory updated."}
+
+
+@app.post("/api/guided-apply", summary="Start guided external portal apply session")
+async def api_start_guided_apply(req: GuidedApplyRequest):
+    """
+    Launch background guided apply session for external company application portals.
+    """
+    try:
+        session_id = start_guided_apply(
+            portal_url=req.portal_url,
+            cv_data=req.cv_data,
+            pdf_path=req.pdf_path,
+            company=req.company,
+            li_at=req.li_at or ""
+        )
+        return {"success": True, "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start guided apply: {str(e)}")
+
+
+@app.get("/api/guided-apply-status", summary="Poll active guided apply session state")
+async def api_get_guided_apply_status(session_id: str = Query(...)):
+    """
+    Get current progress status, active paused field, and screenshots for a guided apply session.
+    """
+    with ACTIVE_SESSIONS_LOCK:
+        if session_id in ACTIVE_SESSIONS:
+            return ACTIVE_SESSIONS[session_id]
+
+    disk_session = load_session(session_id)
+    if disk_session:
+        return disk_session
+
+    raise HTTPException(status_code=404, detail="Session ID not found")
+
+
+@app.post("/api/answer-field", summary="Submit answer for a paused portal field")
+async def api_answer_field(req: AnswerFieldRequest):
+    """
+    Inject user answer into paused guided apply session and resume execution.
+    """
+    with ACTIVE_SESSIONS_LOCK:
+        if req.session_id not in ACTIVE_SESSIONS:
+            raise HTTPException(status_code=404, detail="Active session not found")
+
+        ACTIVE_SESSIONS[req.session_id]["latest_user_answer"] = req.answer
+        ACTIVE_SESSIONS[req.session_id]["remember_answer"] = req.remember
+        ACTIVE_SESSIONS[req.session_id]["status"] = "running"
+        ACTIVE_SESSIONS[req.session_id]["paused_field"] = None
+        ACTIVE_SESSIONS[req.session_id]["last_action"] = f"Resuming with answer for '{req.field_label}'"
+
+    return {"success": True, "message": "Answer received, session resuming."}
+
 
 # ==========================================
 # 🌐 STATIC FILES SERVING (Frontend SPA)

@@ -88,6 +88,9 @@
             </div>
           </div>
         </div>
+        <button type="button" onclick="openAnswersMemoryModal()" class="w-full mt-3 py-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-[#334155] rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
+          ⚙️ <span>Pre-fill Answers Memory</span>
+        </button>
       </section>
 
       <!-- Tab Buttons for Navigation -->
@@ -395,6 +398,81 @@
       </div>
     </div>
 
+    <!-- ==========================================
+         ⚙️ ANSWERS MEMORY SEEDING MODAL
+         ========================================== -->
+    <div id="answers-memory-modal" class="absolute inset-0 bg-slate-900/85 backdrop-blur-md z-[70] flex items-center justify-center p-6 hidden">
+      <div class="bg-[#0F172A] border border-[#334155] rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between border-b border-[#1E293B] p-5">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">⚙️</span>
+            <h3 class="text-sm font-bold text-slate-100">Answers Memory Setup</h3>
+          </div>
+          <button type="button" onclick="closeAnswersMemoryModal()" class="text-slate-400 hover:text-slate-200 text-lg font-bold">✕</button>
+        </div>
+        <div class="p-5 flex-1 overflow-y-auto space-y-3">
+          <p class="text-xs text-slate-400">Pre-fill standard application answers. The agent will fuzzy-match these key-value pairs during external portal applications.</p>
+          <div id="answers-memory-list" class="space-y-2">
+            <!-- Dynamically populated key-value rows -->
+          </div>
+          <button type="button" onclick="addAnswersMemoryRow()" class="text-xs text-rose-400 hover:underline font-semibold">+ Add Custom Answer</button>
+        </div>
+        <div class="border-t border-[#1E293B] p-5 flex gap-3">
+          <button type="button" onclick="closeAnswersMemoryModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-xl">Cancel</button>
+          <button type="button" onclick="saveAnswersMemoryFromModal()" class="flex-1 py-2 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold text-xs rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all">💾 Save Answers Memory</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         🌐 GUIDED PORTAL APPLY MODAL
+         ========================================== -->
+    <div id="guided-apply-modal" class="absolute inset-0 bg-slate-900/85 backdrop-blur-md z-[75] flex items-center justify-center p-6 hidden">
+      <div class="bg-[#0F172A] border border-[#334155] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between border-b border-[#1E293B] p-5">
+          <div>
+            <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">🌐 Guided Portal Application</h3>
+            <p id="guided-modal-company" class="text-[11px] text-slate-400 mt-0.5">Company Portal</p>
+          </div>
+          <button type="button" onclick="closeGuidedApplyModal()" class="text-slate-400 hover:text-slate-200 text-xs font-semibold">Close ✕</button>
+        </div>
+
+        <div class="p-5 flex-1 overflow-y-auto space-y-4">
+          <!-- Status Banner -->
+          <div class="bg-[#1E293B] border border-[#334155] rounded-xl p-3.5 space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300 font-semibold" id="guided-status-text">Status: Initializing...</span>
+              <span class="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded font-mono" id="guided-ats-badge">GENERIC</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-mono" id="guided-last-action">Launching Chromium browser window...</p>
+          </div>
+
+          <!-- Paused Field Prompt Container -->
+          <div id="guided-paused-container" class="hidden bg-[#161F30] border-2 border-rose-500/50 rounded-xl p-4 space-y-3">
+            <div class="flex items-center gap-2 text-xs font-bold text-rose-400">
+              <span>⚠️ Action Required: Paused Field</span>
+            </div>
+            <div class="bg-slate-950 rounded-lg overflow-hidden border border-[#334155] h-52 flex items-center justify-center">
+              <img id="guided-field-screenshot" src="" alt="Highlighted field screenshot" class="max-h-full max-w-full object-contain">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-200 mb-1" id="guided-field-label">Question Label</label>
+              <div id="guided-field-input-wrapper">
+                <!-- Dynamically rendered input based on field_type -->
+              </div>
+            </div>
+            <div class="flex items-center justify-between pt-1">
+              <label class="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer">
+                <input type="checkbox" id="guided-remember-checkbox" checked class="rounded accent-rose-500">
+                <span>Remember this answer in memory for future portals</span>
+              </label>
+              <button type="button" onclick="submitGuidedAnswer()" class="py-2 px-5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow transition-all">Resume →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MS Office Style Ribbon Header Toolbar -->
     <header class="bg-slate-50 border-b border-slate-200 px-6 py-2 flex items-center justify-between shadow-2xs shrink-0 z-30">
       <div class="flex items-center gap-2">
@@ -535,6 +613,6 @@
   </main>
 
   <!-- JS App Handler -->
-  <script src="js/app.js?v=2.3.0"></script>
+  <script src="js/app.js?v=2.4.0"></script>
 </body>
 </html>
