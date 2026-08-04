@@ -782,8 +782,9 @@ def run_guided_apply_session(
         with sync_playwright() as pw:
             context = create_browser_context(pw, user_data_dir)
 
-            # Inject li_at cookie if available
-            if cookie_val and cookie_val.lower() not in ("none", "null", "undefined"):
+            # Only inject li_at cookie if NOT navigating directly to a public LinkedIn job post
+            # (Injecting partial li_at on public LinkedIn job view URLs triggers an infinite 302 redirect loop)
+            if cookie_val and cookie_val.lower() not in ("none", "null", "undefined") and "linkedin.com/jobs" not in portal_url.lower():
                 try:
                     context.add_cookies([{
                         "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
@@ -818,33 +819,55 @@ def run_guided_apply_session(
 
                 # If portal_url is a LinkedIn job post, click Apply link smoothly
                 if "linkedin.com/jobs" in page.url.lower():
-                    print("[guided_applier] LinkedIn job page detected. Waiting for Apply button...")
+                    print("[guided_applier] LinkedIn job page detected. Dismissing overlays & finding Apply button...")
                     inject_overlay(page, "Locating Apply link on LinkedIn page...", 1, 4)
 
+                    # 1. Dismiss sign-in/cookie overlays if present
                     try:
-                        page.wait_for_selector(
-                            "button.jobs-apply-button, a.jobs-apply-button, "
-                            "button:has-text('Apply'), a:has-text('Apply'), "
-                            "button:has-text('Easy Apply'), a:has-text('Easy Apply'), "
-                            "a[href*='apply']",
-                            timeout=6000
-                        )
+                        dismiss_btns = page.query_selector_all("button.modal__dismiss, button[aria-label='Dismiss'], button[aria-label='Close'], button.contextual-sign-in-modal__modal-dismiss")
+                        for d in dismiss_btns:
+                            if d.is_visible():
+                                try: d.click(force=True)
+                                except Exception: pass
                     except Exception:
                         pass
 
-                    apply_btn = page.query_selector(
-                        "button.jobs-apply-button, a.jobs-apply-button, "
-                        "button:has-text('Apply'), a:has-text('Apply'), "
-                        "button:has-text('Easy Apply'), a:has-text('Easy Apply'), "
-                        "a[href*='apply'], [data-automation-id='apply']"
-                    )
+                    # 2. Locate the first VISIBLE Apply element
+                    apply_selectors = [
+                        "button.jobs-apply-button",
+                        "a.jobs-apply-button",
+                        "button.apply-button",
+                        ".top-card-layout__cta",
+                        "a[href*='apply']",
+                        "button:has-text('Apply')",
+                        "a:has-text('Apply')",
+                        "button:has-text('Easy Apply')",
+                        "a:has-text('Easy Apply')"
+                    ]
 
-                    if apply_btn:
-                        print("[guided_applier] Found Apply button. Executing click...")
+                    visible_apply_btn = None
+                    for sel in apply_selectors:
+                        elements = page.query_selector_all(sel)
+                        for el in elements:
+                            try:
+                                if el.is_visible():
+                                    visible_apply_btn = el
+                                    break
+                            except Exception:
+                                pass
+                        if visible_apply_btn:
+                            break
+
+                    if visible_apply_btn:
+                        print("[guided_applier] Found visible Apply button. Executing JS click...")
                         inject_overlay(page, "Clicking Apply link to follow redirect...", 1, 4)
                         try:
                             pages_before = len(context.pages)
-                            apply_btn.click()
+                            try:
+                                page.evaluate("el => el.click()", visible_apply_btn)
+                            except Exception:
+                                visible_apply_btn.click(force=True)
+
                             time.sleep(3.0)
 
                             if len(context.pages) > pages_before:
