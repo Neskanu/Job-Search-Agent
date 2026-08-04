@@ -479,9 +479,9 @@ def derive_from_cv_heuristics(label: str, cv_data: Dict[str, Any]) -> Optional[s
 
 
 def is_search_or_nav_field(el, label: str) -> bool:
-    """Return True if element is a site search box, navigation bar input, or filter field."""
+    """Return True if element is a site search box, navigation bar input, filter, or language selector."""
     norm = normalize_label(label)
-    if norm in ("search", "search jobs", "search careers", "filter", "filter jobs", "ieskoti", "paieska", "query", "keywords"):
+    if norm in ("search", "search jobs", "search careers", "filter", "filter jobs", "ieskoti", "paieska", "query", "keywords", "r4", "language", "kalba"):
         return True
 
     try:
@@ -491,7 +491,13 @@ def is_search_or_nav_field(el, label: str) -> bool:
 
         for attr in ["name", "id", "placeholder", "aria-label", "class"]:
             val = (el.get_attribute(attr) or "").lower()
-            if any(k in val for k in ["nav-search", "header-search", "site-search", "top-search", "search-input", "global-search", "searchbox"]):
+            if any(k in val for k in ["nav-search", "header-search", "site-search", "top-search", "search-input", "global-search", "searchbox", "lang-select", "language-selector", "footer-lang", "footer"]):
+                return True
+
+        # Check options for language selectors (e.g. Arabic, English, Lithuanian)
+        if el.evaluate("el => el.tagName.toLowerCase()") == "select":
+            opt_texts = [o.inner_text().strip().lower() for o in el.query_selector_all("option")[:5]]
+            if any(lang in opt for opt in opt_texts for lang in ["arabic", "english", "lithuanian", "lietuvių", "deutsch", "español", "francais"]):
                 return True
     except Exception:
         pass
@@ -609,7 +615,28 @@ def run_guided_apply_session(
                 page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
                 time.sleep(2.5)
 
-                ats_type = detect_ats_platform(portal_url)
+                # If portal_url is a LinkedIn job post, click the external Apply button to follow the redirect
+                if "linkedin.com/jobs" in page.url.lower():
+                    apply_btn = page.query_selector(
+                        "a.jobs-apply-button, a[href*='apply'], button.jobs-apply-button, "
+                        "a:has-text('Apply'), button:has-text('Apply')"
+                    )
+                    if apply_btn:
+                        print("[guided_applier] Clicking external Apply link on LinkedIn page...")
+                        inject_overlay(page, "Clicking external Apply link to follow redirect...", 1, 4)
+                        try:
+                            with context.expect_page(timeout=10000) as new_page_info:
+                                apply_btn.click()
+                            page = new_page_info.value
+                            page.wait_for_load_state("domcontentloaded", timeout=25000)
+                            time.sleep(3.0)
+                        except Exception as nav_err:
+                            print(f"[guided_applier] Apply click redirect note: {nav_err}")
+                            time.sleep(3.0)
+                            if len(context.pages) > 1:
+                                page = context.pages[-1]
+
+                ats_type = detect_ats_platform(page.url)
                 inject_overlay(page, f"Portal loaded ({ats_type.upper()}). Scanning fields...", 1, 4)
 
                 # Check Workday Auth

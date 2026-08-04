@@ -1882,6 +1882,7 @@ async function loadApplicationHistory() {
 let _activeGuidedSessionId = null;
 let _guidedPollInterval = null;
 let _currentAnswersMemory = {};
+let _lastRenderedFieldLabel = null;
 
 async function openAnswersMemoryModal() {
   await loadAnswersMemoryToModal();
@@ -2058,6 +2059,13 @@ function renderGuidedPausedField(pausedField) {
   img.src = pausedField.screenshot_b64 || '';
   labelEl.textContent = pausedField.label;
 
+  // ONLY re-render the input elements if a NEW field has paused,
+  // so we don't wipe out the user's active typing/selection on every 2-second poll tick!
+  if (_lastRenderedFieldLabel === pausedField.label) {
+    return;
+  }
+  _lastRenderedFieldLabel = pausedField.label;
+
   if (pausedField.field_type === 'captcha') {
     inputWrapper.innerHTML = `
       <p class="text-xs text-rose-300 bg-rose-950/60 p-2.5 rounded-lg border border-rose-800">
@@ -2105,6 +2113,7 @@ async function submitGuidedAnswer() {
 
     if (!resp.ok) throw new Error('Failed to submit answer');
 
+    _lastRenderedFieldLabel = null;
     document.getElementById('guided-paused-container').classList.add('hidden');
     showToast('Answer submitted! Resuming session...');
 
@@ -2115,6 +2124,7 @@ async function submitGuidedAnswer() {
 
 function closeGuidedApplyModal() {
   if (_guidedPollInterval) clearInterval(_guidedPollInterval);
+  _lastRenderedFieldLabel = null;
   document.getElementById('guided-apply-modal').classList.add('hidden');
 }
 
