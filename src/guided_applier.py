@@ -672,6 +672,29 @@ def create_browser_context(pw, user_data_dir: str):
         return browser.new_context(viewport={"width": 1280, "height": 900})
 
 
+def safe_goto(page: Page, url: str, timeout: int = 35000) -> bool:
+    """
+    Safely navigate page to URL. Handles redirect loops (ERR_TOO_MANY_REDIRECTS)
+    by clearing stale/corrupt cookies and retrying cleanly.
+    """
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        return True
+    except Exception as e:
+        err_text = str(e)
+        print(f"[guided_applier] safe_goto note for {url}: {err_text}")
+        if "ERR_TOO_MANY_REDIRECTS" in err_text or "too many redirects" in err_text.lower():
+            try:
+                print("[guided_applier] ERR_TOO_MANY_REDIRECTS detected. Clearing context cookies and retrying...")
+                page.context.clear_cookies()
+                time.sleep(1.0)
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                return True
+            except Exception as retry_err:
+                print(f"[guided_applier] Retry safe_goto warning: {retry_err}")
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Main Guided Application Orchestrator
 # ---------------------------------------------------------------------------
@@ -714,9 +737,9 @@ def run_guided_apply_session(
     save_session(company, portal_url, 1, 4, filled_fields, "running", session_id=session_id)
 
     # Fallback li_at cookie from memory if not provided in request
-    cookie_val = (li_at or "").strip()
+    cookie_val = (li_at or "").strip().strip('"').strip("'")
     if not cookie_val or cookie_val.lower() in ("none", "null", "undefined"):
-        cookie_val = memory.get("linkedin_li_at_cookie", "").strip()
+        cookie_val = memory.get("linkedin_li_at_cookie", "").strip().strip('"').strip("'")
     elif cookie_val:
         memory["linkedin_li_at_cookie"] = cookie_val
         save_answers_memory(memory)
@@ -729,19 +752,13 @@ def run_guided_apply_session(
         with sync_playwright() as pw:
             context = create_browser_context(pw, user_data_dir)
 
-            # Inject li_at cookie if available across all linkedin subdomains
+            # Inject li_at cookie if available
             if cookie_val and cookie_val.lower() not in ("none", "null", "undefined"):
                 try:
-                    context.add_cookies([
-                        {
-                            "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
-                            "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
-                        },
-                        {
-                            "name": "li_at", "value": cookie_val, "domain": "www.linkedin.com",
-                            "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
-                        }
-                    ])
+                    context.add_cookies([{
+                        "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
+                        "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
+                    }])
                 except Exception as c_err:
                     print(f"[guided_applier] Warning adding cookie: {c_err}")
 
@@ -749,24 +766,8 @@ def run_guided_apply_session(
 
             try:
                 print(f"[guided_applier] Navigating to {portal_url}")
-
-                # Establish LinkedIn session domain first if landing on LinkedIn job URL
-                if "linkedin.com" in portal_url.lower() and cookie_val:
-                    try:
-                        page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=15000)
-                        time.sleep(1.5)
-                    except Exception as base_err:
-                        print(f"[guided_applier] Base domain pre-navigation note: {base_err}")
-
-                try:
-                    page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
-                    time.sleep(2.5)
-                except Exception as goto_err:
-                    print(f"[guided_applier] Direct goto error ({goto_err}), retrying via base domain...")
-                    page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=15000)
-                    time.sleep(2.0)
-                    page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
-                    time.sleep(2.5)
+                safe_goto(page, portal_url)
+                time.sleep(2.5)
 
                 # If portal_url is a LinkedIn job post, click the external Apply button to follow the redirect
                 if "linkedin.com/jobs" in page.url.lower():
