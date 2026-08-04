@@ -677,7 +677,12 @@ def safe_goto(page: Page, url: str, timeout: int = 35000) -> bool:
     Safely navigate page to URL. Handles redirect loops (ERR_TOO_MANY_REDIRECTS)
     by clearing stale/corrupt cookies and retrying cleanly.
     """
+    if not url or not url.startswith("http"):
+        print(f"[guided_applier] Invalid portal URL provided: {url}")
+        return False
+
     try:
+        print(f"[guided_applier] Executing page.goto -> {url}")
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         return True
     except Exception as e:
@@ -692,6 +697,12 @@ def safe_goto(page: Page, url: str, timeout: int = 35000) -> bool:
                 return True
             except Exception as retry_err:
                 print(f"[guided_applier] Retry safe_goto warning: {retry_err}")
+        else:
+            try:
+                page.goto(url, wait_until="load", timeout=timeout)
+                return True
+            except Exception:
+                pass
     return False
 
 
@@ -766,7 +777,14 @@ def run_guided_apply_session(
 
             try:
                 print(f"[guided_applier] Navigating directly to {portal_url}")
-                safe_goto(page, portal_url)
+                ok = safe_goto(page, portal_url)
+                if not ok or page.url == "about:blank":
+                    print("[guided_applier] Page still on about:blank after safe_goto, forcing page.goto...")
+                    try:
+                        page.goto(portal_url, wait_until="load", timeout=30000)
+                    except Exception as force_err:
+                        print(f"[guided_applier] Force goto note: {force_err}")
+                time.sleep(2.5)
 
                 # If portal_url is a LinkedIn job post, click Apply link smoothly
                 if "linkedin.com/jobs" in page.url.lower():
