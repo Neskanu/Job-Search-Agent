@@ -1428,6 +1428,28 @@ function getSelectedModel(provider) {
 }
 
 /**
+ * Construct LLM provider configuration object based on sidebar settings.
+ */
+function getLLMConfig() {
+  const provider = document.getElementById("llm-provider")?.value || "gemini";
+  if (provider === "gemini") {
+    const key = document.getElementById("gemini-key")?.value || "";
+    const model = getSelectedModel("gemini");
+    return {
+      gemini_api_key: key || null,
+      gemini_model: model
+    };
+  } else {
+    const url = document.getElementById("ollama-url")?.value || "http://localhost:11434";
+    const model = getSelectedModel("ollama");
+    return {
+      ollama_url: url,
+      ollama_model: model
+    };
+  }
+}
+
+/**
  * Toggle visibility of custom model text input.
  */
 function toggleCustomModelInput(provider) {
@@ -1740,26 +1762,48 @@ function removeFromQueue(idx) { cvState.applyQueue.splice(idx,1); updateQueueBad
 function updateQueueJobField(idx, field, value) { if (cvState.applyQueue[idx]) { cvState.applyQueue[idx][field] = value; saveAppStateToCache(); } }
 
 async function generateCoverLetterForJob(qi) {
-  const job = cvState.applyQueue[qi]; if (!job) return;
+  const job = cvState.applyQueue[qi];
+  if (!job) return;
   const btn = document.getElementById(`cl-gen-btn-${qi}`);
-  if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+  if (btn) {
+    btn.textContent = '⏳ Generating...';
+    btn.disabled = true;
+  }
   try {
     const provider = document.getElementById('llm-provider')?.value || 'gemini';
-    const jobDesc = cvState.searchResults?.find(r => r.url === job.job_url)?.description || cvState.selectedJob?.description || '';
+    const jobDesc = cvState.searchResults?.find(r => r.url === job.job_url)?.description || cvState.selectedJob?.description || `Job Position: ${job.job_title} at ${job.company}`;
+    const cvData = cvState.tailoredCvData || cvState.parsedCvData || { name: "Applicant", sections: [] };
+
     const resp = await fetch('/api/generate-cover-letter', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cv_data: cvState.tailoredCvData || cvState.parsedCvData || {}, job_description: jobDesc,
-        job_title: job.job_title, company: job.company, provider, llm_config: getLLMConfig() })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cv_data: cvData,
+        job_description: jobDesc,
+        job_title: job.job_title || 'Position',
+        company: job.company || 'Company',
+        provider: provider,
+        llm_config: getLLMConfig()
+      })
     });
+
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || 'Generation failed');
+    if (!resp.ok) throw new Error(data.detail || 'Cover letter generation failed');
+
     const ta = document.getElementById(`cover-letter-${qi}`);
     if (ta) ta.value = data.cover_letter;
     cvState.applyQueue[qi].cover_letter = data.cover_letter;
     saveAppStateToCache();
     showToast(`✨ Cover letter generated for ${job.company}`);
-  } catch(err) { showToast(`❌ ${err.message}`); }
-  finally { if (btn) { btn.textContent = '✨ Generate with AI'; btn.disabled = false; } }
+
+  } catch(err) {
+    showToast(`❌ ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.textContent = '✨ Generate with AI';
+      btn.disabled = false;
+    }
+  }
 }
 
 async function startAutoApplyQueue() {
