@@ -2049,7 +2049,6 @@ async function pollGuidedApplyStatus() {
   }
 }
 
-let _lastRenderedFieldLabel = null;
 let _activeDraftUserAnswer = "";
 
 function renderGuidedPausedField(pausedField) {
