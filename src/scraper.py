@@ -122,6 +122,7 @@ def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> D
         "company": "Unknown Company",
         "location": "Unknown Location",
         "description": "",
+        "easy_apply": False,
         "success": False,
         "error": None
     }
@@ -211,6 +212,23 @@ def _scrape_job_details_inner(url: str, li_at_cookie: Optional[str] = None) -> D
                     else:
                         result["location"] = text
                     break
+
+            # Check for Easy Apply button or label
+            try:
+                ea_btn = page.locator(
+                    "button[data-control-name='jobdetails_topcard_inapply'], "
+                    "button.jobs-apply-button:has-text('Easy Apply'), "
+                    "button:has-text('Easy Apply'), "
+                    ".jobs-apply-button"
+                ).first
+                if ea_btn and ea_btn.is_visible():
+                    result["easy_apply"] = True
+                else:
+                    top_card = page.locator(".job-details-jobs-unified-top-card, .top-card-layout, .topcard").first
+                    if top_card.is_visible() and "easy apply" in top_card.inner_text().lower():
+                        result["easy_apply"] = True
+            except Exception:
+                pass
 
             # Dismiss blocking overlays/authwalls
             try:
@@ -380,12 +398,22 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                         loc_el = card.locator(".job-card-container__metadata-item").first
                         loc = loc_el.inner_text().strip() if loc_el.is_visible() else "Unknown Location"
                         
+                        # Check Easy Apply status on card
+                        is_easy_apply = False
+                        try:
+                            card_text = card.inner_text().lower()
+                            if "easy apply" in card_text or card.locator(".job-card-container__apply-method, button:has-text('Easy Apply'), span:has-text('Easy Apply')").count() > 0:
+                                is_easy_apply = True
+                        except Exception:
+                            pass
+
                         if href:
                             jobs.append({
                                 "title": title,
                                 "company": company,
                                 "location": loc,
-                                "url": href
+                                "url": href,
+                                "easy_apply": is_easy_apply
                             })
                     except Exception:
                         continue
@@ -421,6 +449,15 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                             link_el = card.locator("a").first
                         href = link_el.get_attribute("href") if link_el.is_visible() else ""
                         
+                        # Check Easy Apply status on guest card
+                        is_easy_apply = False
+                        try:
+                            card_text = card.inner_text().lower()
+                            if "easy apply" in card_text or card.locator(".job-search-card__easy-apply-label, .easy-apply-label, span:has-text('Easy Apply')").count() > 0:
+                                is_easy_apply = True
+                        except Exception:
+                            pass
+
                         if href:
                             href = normalize_linkedin_url(href)
                             
@@ -428,7 +465,8 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                                 "title": title,
                                 "company": company,
                                 "location": loc,
-                                "url": href
+                                "url": href,
+                                "easy_apply": is_easy_apply
                             })
                     except Exception:
                         continue

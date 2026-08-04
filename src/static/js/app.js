@@ -12,7 +12,11 @@ const cvState = {
   tailoredCvData: null,
   tailoredDocxPath: null,
   tailoredPdfPath: null,
-  theme: "minimalist",
+  theme: "creative",
+  layoutMode: "2col",
+  lineStyle: "short",
+  bulletSymbol: "│",
+  customColor: "#0F766E",
   photo: null
 };
 
@@ -143,6 +147,37 @@ async function uploadCVFile() {
 }
 
 /**
+ * Render Easy Apply visual badge indicator.
+ */
+function renderEasyApplyBadge(isEasyApply) {
+  if (isEasyApply === true) {
+    return `<span class="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2 py-0.5 rounded-full font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>⚡ Easy Apply</span>`;
+  } else if (isEasyApply === false) {
+    return `<span class="inline-flex items-center gap-1 bg-slate-800/80 text-slate-400 border border-slate-700/60 text-[10px] px-2 py-0.5 rounded-full font-medium">🔗 External Apply</span>`;
+  }
+  return '';
+}
+
+/**
+ * Update the Easy Apply badge in the target selection banner.
+ */
+function updateBannerEasyApplyBadge(isEasyApply) {
+  const badgeEl = document.getElementById("banner-easy-apply-badge");
+  if (!badgeEl) return;
+  if (isEasyApply === true) {
+    badgeEl.className = "text-[10px] px-2 py-0.5 rounded-full font-semibold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 inline-flex items-center gap-1";
+    badgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>⚡ Easy Apply`;
+    badgeEl.classList.remove("hidden");
+  } else if (isEasyApply === false) {
+    badgeEl.className = "text-[10px] px-2 py-0.5 rounded-full font-medium border bg-slate-800/80 text-slate-400 border-slate-700/60 inline-flex items-center gap-1";
+    badgeEl.innerHTML = `🔗 External Apply`;
+    badgeEl.classList.remove("hidden");
+  } else {
+    badgeEl.classList.add("hidden");
+  }
+}
+
+/**
  * Search jobs on LinkedIn via Playwright scraper API.
  */
 async function searchJobs() {
@@ -182,8 +217,12 @@ async function searchJobs() {
       const card = document.createElement("div");
       card.className = "bg-[#0F172A] border border-[#334155] rounded-xl p-4 space-y-2 relative";
       const isQueued = cvState.applyQueue && cvState.applyQueue.some(q => q.job_url === job.url);
+      const eaBadge = renderEasyApplyBadge(job.easy_apply);
       card.innerHTML = `
-        <div class="text-xs font-bold text-slate-100">${job.title}</div>
+        <div class="flex items-start justify-between gap-2">
+          <div class="text-xs font-bold text-slate-100">${job.title}</div>
+          ${eaBadge}
+        </div>
         <div class="text-[11px] text-rose-400 font-medium">🏢 ${job.company}</div>
         <div class="text-[10px] text-slate-500">📍 ${job.location}</div>
         <div class="flex justify-between items-center mt-2 border-t border-[#1E293B] pt-2">
@@ -234,6 +273,15 @@ async function scrapeDirectJob() {
     document.getElementById("job-company").value = data.company;
     document.getElementById("job-desc").value = data.description;
     
+    // Automatically select job with easy_apply metadata
+    selectJob({
+      title: data.title,
+      company: data.company,
+      description: data.description,
+      url: url,
+      easy_apply: data.easy_apply
+    });
+
     showToast("Job details fetched successfully!");
   } catch (err) {
     alert(`Fetch Error: ${err.message}`);
@@ -289,6 +337,7 @@ async function selectJob(job) {
   
   document.getElementById("banner-job-title").innerText = job.title;
   document.getElementById("banner-job-company").innerText = job.company;
+  updateBannerEasyApplyBadge(job.easy_apply);
   document.getElementById("target-selection-banner").classList.remove("hidden");
   
   // Fill out the manual section form fields
@@ -318,6 +367,10 @@ async function selectJob(job) {
         cvState.selectedJob.description = data.description;
         if (data.title) cvState.selectedJob.title = data.title;
         if (data.company) cvState.selectedJob.company = data.company;
+        if (data.easy_apply !== undefined) {
+          cvState.selectedJob.easy_apply = data.easy_apply;
+          updateBannerEasyApplyBadge(data.easy_apply);
+        }
         
         // Update manual form fields with the scraped details
         if (document.getElementById("job-title")) document.getElementById("job-title").value = cvState.selectedJob.title;
@@ -730,67 +783,78 @@ async function tailorResume() {
 function renderWYSIWYG(cvData) {
   if (!cvData) return;
 
-  // Sync style theme classes on resume-sheet
   const sheet = document.getElementById("resume-sheet");
   if (sheet) {
-    const classesToRemove = Array.from(sheet.classList).filter(cls => cls.startsWith("theme-"));
+    const classesToRemove = Array.from(sheet.classList).filter(cls => cls.startsWith("theme-") || cls.startsWith("layout-") || cls.startsWith("line-style-"));
     classesToRemove.forEach(cls => sheet.classList.remove(cls));
-    const selectedTheme = document.getElementById("cv-theme-select").value || "minimalist";
-    sheet.classList.add(`theme-${selectedTheme}`);
+    
+    const selectedTheme = document.getElementById("cv-theme-select")?.value || cvState.theme || "creative";
+    const selectedLayout = document.getElementById("cv-layout-select")?.value || cvState.layoutMode || "2col";
+    const selectedLine = document.getElementById("cv-line-style-select")?.value || cvState.lineStyle || "short";
+    
+    sheet.classList.add(`theme-${selectedTheme}`, `layout-${selectedLayout}`, `line-style-${selectedLine}`);
     cvState.theme = selectedTheme;
+    cvState.layoutMode = selectedLayout;
+    cvState.lineStyle = selectedLine;
   }
 
-  // Set photo if available
-  const photoImg = document.getElementById("cv-photo");
-  const removeBtn = document.getElementById("btn-remove-photo");
-  if (photoImg) {
-    if (cvData.photo) {
-      photoImg.src = cvData.photo;
-      cvState.photo = cvData.photo;
-      if (removeBtn) removeBtn.classList.remove("hidden");
-    } else {
-      photoImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>";
-      cvState.photo = null;
-      if (removeBtn) removeBtn.classList.add("hidden");
-    }
+  if (cvState.customColor) {
+    document.documentElement.style.setProperty('--theme-accent', cvState.customColor);
   }
 
-  // Set Name
-  document.getElementById("cv-name").innerText = cvData.name || "Your Name";
-
-  // Set Contact Header
-  const contactText = Array.isArray(cvData.contact_info) ? cvData.contact_info.join("  |  ") : (cvData.contact_info || "");
-  document.getElementById("cv-contact").innerText = contactText;
-
-  // Set Sections
   const listContainer = document.getElementById("sections-list");
   listContainer.innerHTML = "";
 
   if (Array.isArray(cvData.sections)) {
+    const is2Col = (cvState.layoutMode === "2col");
+    
     let currentPageCard = document.createElement("div");
-    currentPageCard.className = "a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-8 mb-6 relative space-y-6";
+    currentPageCard.className = "a4-page-card bg-white shadow-2xl rounded-md relative";
+
+    // 1. Header Banner Block
+    const headerBanner = document.createElement("div");
+    headerBanner.className = "cv-header-banner";
+
+    const photoSrc = cvData.photo || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230F766E'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%23FFFFFF' text-anchor='middle'>Photo</text></svg>";
+    const contactText = Array.isArray(cvData.contact_info) ? cvData.contact_info.join("  │  ") : (cvData.contact_info || "");
+
+    headerBanner.innerHTML = `
+      <div id="cv-photo-container" class="relative group/photo cursor-pointer shrink-0">
+        <img id="cv-photo" src="${photoSrc}" class="cv-photo-frame" alt="Profile Photo">
+        <input type="file" id="cv-photo-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="uploadCVPhoto()">
+        <div class="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold pointer-events-none z-10">Update</div>
+        <button onclick="removeCVPhoto(event)" id="btn-remove-photo" class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md ${cvData.photo ? '' : 'hidden'} transition-all hover:scale-110 z-20" title="Remove Photo">×</button>
+      </div>
+      <div class="flex-1">
+        <h1 contenteditable="true" id="cv-name" class="text-2xl font-extrabold text-white tracking-wide outline-none mb-1">${cvData.name || "Your Name"}</h1>
+        <div contenteditable="true" id="cv-contact" class="text-xs text-teal-100 font-medium outline-none">${contactText}</div>
+      </div>
+    `;
+    currentPageCard.appendChild(headerBanner);
+
+    // 2. Layout Grid Container (2-Col Sidebar vs 1-Col Standard)
+    let layoutContainer = document.createElement("div");
+    let sidebarCol = null;
+    let mainCol = null;
+
+    if (is2Col) {
+      layoutContainer.className = "cv-2col-layout";
+      sidebarCol = document.createElement("div");
+      sidebarCol.className = "cv-2col-sidebar";
+      
+      mainCol = document.createElement("div");
+      mainCol.className = "cv-2col-main";
+
+      layoutContainer.appendChild(sidebarCol);
+      layoutContainer.appendChild(mainCol);
+    } else {
+      layoutContainer.className = "cv-1col-layout";
+    }
+    currentPageCard.appendChild(layoutContainer);
     listContainer.appendChild(currentPageCard);
 
+    // 3. Render Sections
     cvData.sections.forEach((sec, sIdx) => {
-      // Split into Page 2 card after 2 major sections if total sections > 2
-      if (sIdx === 2 && cvData.sections.length > 2) {
-        const pageBreak = document.createElement("div");
-        pageBreak.className = "a4-page-break my-8 flex items-center justify-center relative select-none pointer-events-none";
-        pageBreak.innerHTML = `
-          <div class="absolute inset-0 flex items-center"><div class="w-full border-t-2 border-dashed border-slate-300"></div></div>
-          <div class="relative bg-slate-200 px-4 py-1 text-[10px] font-bold text-slate-600 uppercase tracking-widest rounded-full border border-slate-300 shadow-sm flex items-center gap-1.5 z-10">
-            <span>📄 PAGE 1 END</span>
-            <span class="text-slate-400">•</span>
-            <span class="text-rose-500 font-extrabold">PAGE 2 BEGINS</span>
-          </div>
-        `;
-        listContainer.appendChild(pageBreak);
-
-        currentPageCard = document.createElement("div");
-        currentPageCard.className = "a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-8 mb-6 relative space-y-6";
-        listContainer.appendChild(currentPageCard);
-      }
-
       const secEl = document.createElement("div");
       secEl.className = "draggable-section group/section";
       secEl.setAttribute("data-type", sec.type || "text");
@@ -798,14 +862,23 @@ function renderWYSIWYG(cvData) {
       let contentHTML = "";
 
       if (sec.type === "text") {
-        contentHTML = `<div class="sec-content text-sm text-slate-600 leading-relaxed outline-none" contenteditable="true">${sec.content || ""}</div>`;
+        contentHTML = `<div class="sec-content text-xs text-slate-700 leading-relaxed outline-none p-2 border-l-3 rounded-r-md ml-0" contenteditable="true">${sec.content || ""}</div>`;
       } 
       else if (sec.type === "list") {
-        const listVal = Array.isArray(sec.content) ? sec.content.join(", ") : (sec.content || "");
-        contentHTML = `<div class="sec-content text-sm text-slate-600 font-medium outline-none" contenteditable="true">${listVal}</div>`;
+        if (Array.isArray(sec.content)) {
+          const listItemsHTML = sec.content.map(skill => `
+            <div class="skill-item-row flex items-center gap-1.5 py-0.5">
+              <span class="bullet-marker text-xs font-bold select-none">${cvState.bulletSymbol || '│'}</span>
+              <span contenteditable="true" class="skill-chip flex-1 outline-none text-xs font-semibold text-slate-700">${skill}</span>
+            </div>
+          `).join('');
+          contentHTML = `<div class="sec-content space-y-1">${listItemsHTML}</div>`;
+        } else {
+          contentHTML = `<div class="sec-content text-xs text-slate-600 font-medium outline-none p-2 ml-0" contenteditable="true">${sec.content || ""}</div>`;
+        }
       } 
       else if (sec.type === "experience" || sec.type === "education") {
-        contentHTML = `<div class="sec-content space-y-4">`;
+        contentHTML = `<div class="sec-content space-y-3">`;
         if (Array.isArray(sec.content)) {
           sec.content.forEach((item, itemIdx) => {
             const isExp = sec.type === "experience";
@@ -814,36 +887,35 @@ function renderWYSIWYG(cvData) {
             const period = item.period || "";
             const location = item.location || "";
 
-            // Bullets List
-            let bulletsHTML = `<ul class="list-disc pl-5 mt-1.5 space-y-1 text-xs text-slate-500 font-normal">`;
+            let bulletsHTML = `<div class="bullets-container space-y-1 mt-1.5">`;
             if (Array.isArray(item.bullets)) {
               item.bullets.forEach((bullet, bIdx) => {
                 bulletsHTML += `
-                  <li class="bullet-item relative group/bullet pr-8">
-                    <span contenteditable="true" class="bullet-text block outline-none">${bullet}</span>
+                  <div class="bullet-item flex items-start gap-1.5 group/bullet relative pr-6 my-0.5">
+                    <span class="bullet-marker text-xs font-bold select-none pt-0.5">${cvState.bulletSymbol || '│'}</span>
+                    <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">${bullet}</span>
                     <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
-                  </li>`;
+                  </div>`;
               });
             }
-            bulletsHTML += `</ul>`;
+            bulletsHTML += `</div>`;
 
             contentHTML += `
-              <div class="item-block border-l-2 border-slate-100 pl-3 relative group/item" data-idx="${itemIdx}">
-                <div class="flex justify-between items-baseline">
-                  <div class="text-sm font-semibold text-slate-800">
-                    <span contenteditable="true" class="item-title outline-none">${titleVal}</span>
-                    <span class="text-slate-400 font-normal"> at </span>
-                    <span contenteditable="true" class="item-sub-title italic font-medium text-slate-700 outline-none">${subTitleVal}</span>
+              <div class="item-block border-l-3 pl-3 py-0.5 mb-2 relative group/item rounded-r-md" data-idx="${itemIdx}">
+                <div class="flex flex-wrap justify-between items-start gap-2 mb-0.5">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span contenteditable="true" class="item-title text-xs font-bold text-slate-900 outline-none">${titleVal}</span>
+                    <span class="text-slate-400 font-medium text-xs">@</span>
+                    <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 text-xs outline-none">${subTitleVal}</span>
                   </div>
-                  <div class="text-[11px] text-slate-400 font-medium text-right">
+                  <div class="flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
                     <span contenteditable="true" class="item-period outline-none">${period}</span>
-                    ${location ? ` | <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
+                    ${location ? `<span class="text-slate-300">│</span> <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
                   </div>
                 </div>
                 ${bulletsHTML}
                 
-                <!-- Inner Actions inside Experience Item -->
-                <div class="flex gap-3 mt-1.5">
+                <div class="flex gap-3 mt-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
                   <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
                   <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
                 </div>
@@ -852,48 +924,72 @@ function renderWYSIWYG(cvData) {
         }
         contentHTML += `</div>`;
         
-        // Append "+ Add Block" button for list blocks
         contentHTML += `
-          <div class="mt-3 flex gap-2">
-            <button onclick="addBlockItem(this, '${sec.type}')" class="inline-flex items-center gap-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition-all hover:scale-105 active:scale-95">
-              ➕ Add ${sec.type === 'experience' ? 'Job Position' : 'Education Item'}
+          <div class="mt-2 flex gap-2">
+            <button onclick="addBlockItem(this, '${sec.type}')" class="inline-flex items-center gap-1 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1 rounded-md border border-slate-200 transition-all">
+              ➕ Add ${sec.type === 'experience' ? 'Position' : 'Education'}
             </button>
           </div>`;
       }
 
-      // Build section wrapper HTML containing sortable handles and Delete Section button
       secEl.innerHTML = `
-        <div class="drag-handle">☰</div>
-        <div class="flex justify-between items-center border-b border-slate-100 pb-1 mb-2">
-          <h2 contenteditable="true" class="sec-title text-sm font-bold text-slate-900 tracking-wide uppercase outline-none">${sec.title || "Section"}</h2>
-          <button onclick="deleteSection(this)" class="text-[10px] text-red-500 font-semibold hover:underline transition-opacity">Delete Section 🗑️</button>
+        <div class="sec-header">
+          <h2 contenteditable="true" class="sec-title outline-none">${sec.title || "Section"}</h2>
+          <div class="sec-tools">
+            <span class="drag-handle" title="Drag to reorder section">☰</span>
+            <button onclick="deleteSection(this)" class="text-[10px] text-red-500 font-semibold hover:underline">Delete 🗑️</button>
+          </div>
         </div>
         ${contentHTML}
       `;
 
-      currentPageCard.appendChild(secEl);
+      if (is2Col && sidebarCol && mainCol) {
+        if (sec.type === "list" || sec.type === "education") {
+          sidebarCol.appendChild(secEl);
+        } else {
+          mainCol.appendChild(secEl);
+        }
+      } else {
+        layoutContainer.appendChild(secEl);
+      }
     });
   }
 
   // Initialize SortableJS for dragging & reordering sections
-  new Sortable(listContainer, {
+  new Sortable(listContainer.querySelector('.cv-2col-main') || listContainer.querySelector('.cv-1col-layout') || listContainer, {
     handle: '.drag-handle',
     ghostClass: 'ghost-class',
     animation: 180
   });
 }
 
-/**
- * Change the layout style theme of the resume preview.
- * Swaps CSS classes on the sheet wrapper and auto-saves the new layout.
- */
+function getActiveCV() {
+  return cvState.tailoredCvData || cvState.parsedCvData || cvState.currentCV;
+}
+
 function changeCVTheme() {
   const themeSelect = document.getElementById("cv-theme-select");
   if (!themeSelect) return;
   
   const selectedTheme = themeSelect.value;
   cvState.theme = selectedTheme;
+
+  const themeColors = {
+    creative: "#0F766E",
+    executive: "#1E3A8A",
+    tech: "#0F172A",
+    academic: "#27272A",
+    minimalist: "#E11D48"
+  };
+
+  const accentColor = themeColors[selectedTheme] || "#0F766E";
+  cvState.customColor = accentColor;
+  document.documentElement.style.setProperty('--theme-accent', accentColor);
   
+  // Update the color picker input to reflect the new theme's default color
+  const colorPicker = document.getElementById("custom-color-input");
+  if (colorPicker) colorPicker.value = accentColor;
+
   const sheet = document.getElementById("resume-sheet");
   if (sheet) {
     const classesToRemove = Array.from(sheet.classList).filter(cls => cls.startsWith("theme-"));
@@ -901,30 +997,77 @@ function changeCVTheme() {
     sheet.classList.add(`theme-${selectedTheme}`);
   }
   
-  // Automatically trigger save and compile in the background
-  if (cvState.tailoredCvData) {
+  const activeCV = getActiveCV();
+  if (activeCV) {
+    renderWYSIWYG(activeCV);
     saveAndCompile();
   }
 }
 
-// ==========================================
-// ➕ INLINE DYNAMIC CV EDIT INTERACTIONS
-// ==========================================
+function changeLayoutMode(mode) {
+  cvState.layoutMode = mode;
+  const sheet = document.getElementById("resume-sheet");
+  if (sheet) {
+    sheet.classList.remove("layout-2col", "layout-1col");
+    sheet.classList.add(`layout-${mode}`);
+  }
+  const activeCV = getActiveCV();
+  if (activeCV) {
+    renderWYSIWYG(activeCV);
+    saveAndCompile();
+  }
+}
+
+function changeLineStyle(style) {
+  cvState.lineStyle = style;
+  const sheet = document.getElementById("resume-sheet");
+  if (sheet) {
+    sheet.classList.remove("line-style-short", "line-style-full", "line-style-none");
+    sheet.classList.add(`line-style-${style}`);
+  }
+  const activeCV = getActiveCV();
+  if (activeCV) {
+    renderWYSIWYG(activeCV);
+    saveAndCompile();
+  }
+}
+
+function changeBulletSymbol(symbol) {
+  cvState.bulletSymbol = symbol;
+  document.querySelectorAll(".bullet-marker").forEach(el => {
+    el.innerText = symbol;
+  });
+  const activeCV = getActiveCV();
+  if (activeCV) {
+    saveAndCompile();
+  }
+}
+
+function changeCustomColor(color) {
+  cvState.customColor = color;
+  document.documentElement.style.setProperty('--theme-accent', color);
+  const activeCV = getActiveCV();
+  if (activeCV) {
+    saveAndCompile();
+  }
+}
 
 function addBullet(btn) {
-  const ul = btn.closest('.item-block').querySelector('ul');
-  const li = document.createElement('li');
-  li.className = 'bullet-item relative group/bullet pr-8';
-  li.innerHTML = `
-    <span contenteditable="true" class="bullet-text block outline-none">New bullet point. Click to customize.</span>
+  const container = btn.closest('.item-block').querySelector('.bullets-container') || btn.closest('.item-block').querySelector('ul') || btn.closest('.item-block');
+  const div = document.createElement('div');
+  div.className = 'bullet-item flex items-start gap-2 group/bullet relative pr-8 my-1';
+  div.innerHTML = `
+    <span class="bullet-marker text-xs font-bold select-none pt-0.5">${cvState.bulletSymbol || '│'}</span>
+    <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">New bullet point. Click to customize.</span>
     <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
   `;
-  ul.appendChild(li);
+  container.appendChild(div);
   saveAndCompile();
 }
 
 function deleteBullet(btn) {
-  btn.closest('li').remove();
+  const item = btn.closest('.bullet-item') || btn.closest('li');
+  if (item) item.remove();
   saveAndCompile();
 }
 
@@ -939,35 +1082,44 @@ function deleteItemBlock(btn) {
 // 💾 SAVE & REBUILD HANDLERS
 // ==========================================
 
-/**
- * Scrape all edits from the WYSIWYG DOM nodes, compile them back into JSON,
- * and hit generate-docs API to regenerate PDF & Word files.
- */
 async function saveAndCompile() {
-  if (!cvState.tailoredCvData) return;
+  const activeCV = getActiveCV();
+  if (!activeCV) return;
 
-  const name = document.getElementById("cv-name").innerText.trim();
-  const contactRaw = document.getElementById("cv-contact").innerText.trim();
-  const contact_info = contactRaw.split("|").map(s => s.trim()).filter(s => s.length > 0);
+  const nameEl = document.getElementById("cv-name");
+  const contactEl = document.getElementById("cv-contact");
+
+  if (nameEl) activeCV.name = nameEl.innerText.trim();
+  if (contactEl) {
+    const contactRaw = contactEl.innerText.trim();
+    activeCV.contact_info = contactRaw.split("│").map(s => s.trim()).filter(s => s.length > 0);
+  }
 
   const sections = [];
   document.querySelectorAll(".draggable-section").forEach(secEl => {
-    const title = secEl.querySelector(".sec-title").innerText.trim();
-    const type = secEl.getAttribute("data-type");
+    const titleEl = secEl.querySelector(".sec-title");
+    const title = titleEl ? titleEl.innerText.trim() : "SECTION";
+    const type = secEl.getAttribute("data-type") || "text";
     let content = null;
 
     if (type === "text") {
-      content = secEl.querySelector(".sec-content").innerText.trim();
+      const contentEl = secEl.querySelector(".sec-content");
+      content = contentEl ? contentEl.innerText.trim() : "";
     } 
     else if (type === "list") {
-      const listRaw = secEl.querySelector(".sec-content").innerText.trim();
-      content = listRaw.split(",").map(s => s.trim()).filter(s => s.length > 0);
+      const chips = secEl.querySelectorAll(".skill-chip");
+      if (chips.length > 0) {
+        content = Array.from(chips).map(c => c.innerText.trim()).filter(s => s.length > 0);
+      } else {
+        const contentEl = secEl.querySelector(".sec-content");
+        content = contentEl ? contentEl.innerText.trim() : "";
+      }
     } 
     else if (type === "experience" || type === "education") {
       content = [];
       secEl.querySelectorAll(".item-block").forEach(itemEl => {
         const item = {
-          period: itemEl.querySelector(".item-period").innerText.trim()
+          period: itemEl.querySelector(".item-period")?.innerText.trim() || ""
         };
 
         const locEl = itemEl.querySelector(".item-location");
@@ -976,11 +1128,11 @@ async function saveAndCompile() {
         }
 
         if (type === "experience") {
-          item.role = itemEl.querySelector(".item-title").innerText.trim();
-          item.company = itemEl.querySelector(".item-sub-title").innerText.trim();
+          item.role = itemEl.querySelector(".item-title")?.innerText.trim() || "";
+          item.company = itemEl.querySelector(".item-sub-title")?.innerText.trim() || "";
         } else {
-          item.degree = itemEl.querySelector(".item-title").innerText.trim();
-          item.institution = itemEl.querySelector(".item-sub-title").innerText.trim();
+          item.degree = itemEl.querySelector(".item-title")?.innerText.trim() || "";
+          item.institution = itemEl.querySelector(".item-sub-title")?.innerText.trim() || "";
         }
 
         const bullets = [];
@@ -996,40 +1148,39 @@ async function saveAndCompile() {
     sections.push({ title, type, content });
   });
 
-  const updatedCv = {
-    name: name,
-    contact_info: contact_info,
-    photo: cvState.photo || null,
-    sections: sections
-  };
+  if (sections.length > 0) {
+    activeCV.sections = sections;
+  }
 
-  showToast("Rebuilding documents...");
+  // Inject photo from state into cv_data so backend can embed it in PDF/DOCX
+  activeCV.photo = cvState.photo || null;
 
   try {
-    // Send updated JSON to compile documents
     const response = await fetch("/api/generate-docs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        cv_data: updatedCv,
-        job_title: cvState.selectedJob.title,
-        company: cvState.selectedJob.company,
-        theme: cvState.theme
+        cv_data: activeCV,
+        job_title: cvState.selectedJob ? cvState.selectedJob.title : "Target Role",
+        company: cvState.selectedJob ? cvState.selectedJob.company : "Company",
+        theme: cvState.theme || "creative",
+        custom_color: cvState.customColor || "#0F766E",
+        line_style: cvState.lineStyle || "short",
+        bullet_symbol: cvState.bulletSymbol || "│",
+        layout_mode: cvState.layoutMode || "2col"
       })
     });
 
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Regeneration failed.");
 
-    // Update file paths in state
-    cvState.tailoredCvData = updatedCv;
+    cvState.tailoredCvData = activeCV;
     cvState.tailoredDocxPath = data.docx_path;
     cvState.tailoredPdfPath = data.pdf_path;
 
-    showToast("Rebuilt Word & PDF outputs successfully!");
     refreshPDFPreview();
   } catch (err) {
-    alert(`Save Error: ${err.message}`);
+    console.error("Save Error:", err);
   }
 }
 
@@ -1118,31 +1269,34 @@ function addBlockItem(btn, type) {
   if (!contentDiv) return;
   
   const newItem = document.createElement("div");
-  newItem.className = "item-block border-l-2 border-slate-100 pl-3 relative group/item mt-4";
+  newItem.className = "item-block border-l-3 pl-3.5 py-1 mb-3 relative group/item rounded-r-lg transition-all mt-3";
   
   const isExp = type === "experience";
   const titleVal = isExp ? "Job Title / Role" : "Degree / Certificate";
   const subTitleVal = isExp ? "Company Name" : "Institution Name";
   
   newItem.innerHTML = `
-    <div class="flex justify-between items-baseline">
-      <div class="text-sm font-semibold text-slate-800">
-        <span contenteditable="true" class="item-title outline-none">${titleVal}</span>
-        <span class="text-slate-400 font-normal"> at </span>
-        <span contenteditable="true" class="item-sub-title italic font-medium text-slate-700 outline-none">${subTitleVal}</span>
+    <div class="flex flex-wrap justify-between items-start gap-2 mb-1">
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span contenteditable="true" class="item-title text-sm font-bold text-slate-900 outline-none">${titleVal}</span>
+        <span class="text-slate-400 font-medium text-xs">@</span>
+        <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none">${subTitleVal}</span>
       </div>
-      <div class="text-[11px] text-slate-400 font-medium text-right">
+      <div class="flex items-center gap-1.5 text-[11px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full border border-slate-200 font-medium shadow-2xs">
+        <span>📅</span>
         <span contenteditable="true" class="item-period outline-none">2024 - Present</span>
-        <span contenteditable="true" class="item-location outline-none"> | Location</span>
+        <span class="text-slate-300">|</span> <span>📍</span>
+        <span contenteditable="true" class="item-location outline-none">Location</span>
       </div>
     </div>
-    <ul class="list-disc pl-5 mt-1.5 space-y-1 text-xs text-slate-500 font-normal">
-      <li class="bullet-item relative group/bullet pr-8">
-        <span contenteditable="true" class="bullet-text block outline-none">Describe your impact or responsibilities.</span>
+    <div class="bullets-container space-y-1.5 mt-2">
+      <div class="bullet-item flex items-start gap-2 group/bullet relative pr-8 my-1">
+        <span class="bullet-marker text-xs font-bold select-none pt-0.5">│</span>
+        <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">Describe your impact or responsibilities.</span>
         <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
-      </li>
-    </ul>
-    <div class="flex gap-3 mt-1.5">
+      </div>
+    </div>
+    <div class="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
       <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
       <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
     </div>
@@ -1482,7 +1636,8 @@ function toggleJobQueue(idx) {
     cvState.applyQueue.push({
       job_url: job.url, job_title: job.title, company: job.company,
       pdf_path: cvState.tailoredPdfPath || cvState.originalCvPath || '',
-      cover_letter: '', answers_override: {}
+      cover_letter: '', answers_override: {},
+      easy_apply: job.easy_apply
     });
     showToast(`Added ${job.company} to queue ✓`);
   }
@@ -1519,7 +1674,10 @@ function renderQueueModal() {
     <div class="bg-[#1E293B] border border-[#334155] rounded-xl p-4 space-y-3">
       <div class="flex items-start justify-between">
         <div>
-          <div class="text-xs font-bold text-slate-100">${job.job_title}</div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="text-xs font-bold text-slate-100">${job.job_title}</div>
+            ${renderEasyApplyBadge(job.easy_apply)}
+          </div>
           <div class="text-[11px] text-violet-400 font-medium mt-0.5">🏢 ${job.company}</div>
           <div class="text-[10px] text-slate-500 font-mono truncate max-w-xs mt-0.5">${job.job_url}</div>
         </div>

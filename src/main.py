@@ -75,6 +75,10 @@ class GenerateDocsRequest(BaseModel):
     job_title: str = Field(..., json_schema_extra={"example": "Python Developer"})
     company: str = Field(..., json_schema_extra={"example": "Google"})
     theme: Optional[str] = Field(default="minimalist", description="CV layout style template theme")
+    custom_color: Optional[str] = Field(default=None, description="Custom accent color hex")
+    line_style: Optional[str] = Field(default="short", description="Accent line style: short, full, none")
+    bullet_symbol: Optional[str] = Field(default="│", description="Bullet symbol: │, ▸, •, ◆")
+    layout_mode: Optional[str] = Field(default="2col", description="Layout mode: 2col, 1col")
 
 # ==========================================
 # 🛠️ API ENDPOINTS
@@ -273,9 +277,9 @@ async def generate_docs(request: GenerateDocsRequest):
         docx_path = os.path.join("data/tailored_cvs", f"{filename_base}.docx")
         pdf_path = os.path.join("data/tailored_cvs", f"{filename_base}.pdf")
         
-        # Save files on background threads to prevent event loop lag, passing selected theme layout
-        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path, request.theme)
-        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path, request.theme)
+        # Save files on background threads to prevent event loop lag, passing selected theme layout & customizations
+        await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path, request.theme, request.custom_color, request.bullet_symbol)
+        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path, request.theme, request.custom_color, request.line_style, request.bullet_symbol, request.layout_mode)
         
         return {
             "success": True,
@@ -351,6 +355,7 @@ class AutoApplyJob(BaseModel):
     pdf_path: str
     cover_letter: Optional[str] = ""
     answers_override: Optional[Dict[str, str]] = {}
+    easy_apply: Optional[bool] = None
 
 
 class AutoApplyRequest(BaseModel):

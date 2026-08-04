@@ -220,8 +220,9 @@
 
     <!-- Optimization Console Launch Button -->
     <div class="p-6 border-t border-[#334155] bg-[#161F30]">
-      <div id="target-selection-banner" class="mb-3 p-3 bg-[#1E293B] rounded-lg border border-[#334155] text-xs text-slate-400 hidden">
-        Selected Job: <strong class="text-rose-400" id="banner-job-title">Python Dev</strong> at <span class="italic text-slate-300" id="banner-job-company">Inc.</span>
+      <div id="target-selection-banner" class="mb-3 p-3 bg-[#1E293B] rounded-lg border border-[#334155] text-xs text-slate-400 hidden flex items-center justify-between gap-2 flex-wrap">
+        <div>Selected Job: <strong class="text-rose-400" id="banner-job-title">Python Dev</strong> at <span class="italic text-slate-300" id="banner-job-company">Inc.</span></div>
+        <span id="banner-easy-apply-badge" class="hidden text-[10px] px-2 py-0.5 rounded-full font-semibold border"></span>
       </div>
       <button type="button" onclick="tailorResume()" id="btn-tailor-cv" class="w-full py-3.5 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold text-xs rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
         🚀 <span>Optimize Resume for Role</span>
@@ -394,42 +395,89 @@
       </div>
     </div>
 
-    <!-- Top sticky actions bar -->
-    <header class="h-16 border-b border-slate-200 bg-white px-8 flex items-center justify-between shadow-sm">
-      <div class="flex items-center gap-3">
-        <span class="text-xs bg-rose-50 text-rose-500 font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">WYSIWYG Canvas</span>
-        <span class="text-xs text-slate-400">Drag sections to reorder. Click text to edit inline.</span>
+    <!-- MS Office Style Ribbon Header Toolbar -->
+    <header class="bg-slate-50 border-b border-slate-200 px-6 py-2 flex items-center justify-between shadow-2xs shrink-0 z-30">
+      <div class="flex items-center gap-2">
+        <span class="text-xs bg-rose-100 text-rose-700 font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">MS Office Builder</span>
+        <span class="text-xs text-slate-500 font-medium hidden lg:inline">Real-time CV Canvas & Document Generator</span>
       </div>
       
-      <!-- Download Buttons & Save trigger -->
-      <div class="flex items-center gap-3 hidden" id="download-actions-bar">
-        <!-- View Mode Selector -->
-        <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2" id="view-mode-selector">
-          <button onclick="setViewMode('edit')" id="btn-mode-edit" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-slate-800 shadow-sm transition-all">✏️ Edit</button>
-          <button onclick="setViewMode('split')" id="btn-mode-split" class="px-3 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all">🥞 Split View</button>
-          <button onclick="setViewMode('preview')" id="btn-mode-preview" class="px-3 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all">👁️ PDF Preview</button>
+      <!-- MS Office Style Ribbon Tools Bar -->
+      <div class="flex items-center gap-2 overflow-x-auto hidden" id="download-actions-bar">
+        
+        <!-- Ribbon Group 1: View Modes -->
+        <div class="flex items-center bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs h-8">
+          <button onclick="setViewMode('edit')" id="btn-mode-edit" class="h-7 px-2.5 rounded-md text-xs font-semibold bg-slate-900 text-white shadow-xs transition-all">✏️ Edit</button>
+          <button onclick="setViewMode('split')" id="btn-mode-split" class="h-7 px-2.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all">🥞 Split</button>
+          <button onclick="setViewMode('preview')" id="btn-mode-preview" class="h-7 px-2.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all">👁️ Preview</button>
         </div>
 
-        <!-- Style Selector Dropdown -->
-        <div class="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-sm">
-          <label for="cv-theme-select" class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Layout Style:</label>
-          <select id="cv-theme-select" onchange="changeCVTheme()" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+        <div class="h-5 w-px bg-slate-200 mx-0.5"></div>
+
+        <!-- Ribbon Group 2: Grid Layout -->
+        <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 h-8 shadow-2xs">
+          <span class="text-xs">📐</span>
+          <label for="cv-layout-select" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Layout:</label>
+          <select id="cv-layout-select" onchange="changeLayoutMode(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer h-full">
+            <option value="2col" selected>2-Col Sidebar</option>
+            <option value="1col">1-Col Standard</option>
+          </select>
+        </div>
+
+        <!-- Ribbon Group 3: Accent Line -->
+        <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 h-8 shadow-2xs">
+          <span class="text-xs">📏</span>
+          <label for="cv-line-style-select" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Line:</label>
+          <select id="cv-line-style-select" onchange="changeLineStyle(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer h-full">
+            <option value="short" selected>Short Pill (18px)</option>
+            <option value="full">Full Height Line</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+
+        <!-- Ribbon Group 4: Bullet Symbol -->
+        <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 h-8 shadow-2xs">
+          <span class="text-xs">🔸</span>
+          <label for="cv-bullet-select" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Bullet:</label>
+          <select id="cv-bullet-select" onchange="changeBulletSymbol(this.value)" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer h-full">
+            <option value="│" selected>│ Vertical Bar</option>
+            <option value="▸">▸ Arrow</option>
+            <option value="•">• Dot</option>
+            <option value="◆">◆ Diamond</option>
+          </select>
+        </div>
+
+        <div class="h-5 w-px bg-slate-200 mx-0.5"></div>
+
+        <!-- Ribbon Group 5: Theme & Live Accent Color -->
+        <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 h-8 shadow-2xs">
+          <span class="text-xs">🎨</span>
+          <label for="cv-theme-select" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Theme:</label>
+          <select id="cv-theme-select" onchange="changeCVTheme()" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer h-full">
+            <option value="creative" selected>Creative Teal</option>
             <option value="minimalist">Minimalist Classic</option>
             <option value="executive">Modern Executive</option>
-            <option value="creative">Creative Teal</option>
             <option value="tech">Charcoal Developer</option>
             <option value="academic">Traditional Serif</option>
           </select>
+          <input type="color" id="cv-accent-color" value="#0F766E" onchange="changeCustomColor(this.value)" class="w-5 h-5 rounded cursor-pointer border-0 bg-transparent" title="Custom Accent Color">
         </div>
-        <button onclick="saveAndCompile()" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-sm">
-          💾 Save Changes
-        </button>
-        <button onclick="downloadFormat('docx')" class="bg-gradient-to-r from-[#11998e] to-[#38ef7d] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
-          📝 Word (.docx)
-        </button>
-        <button onclick="downloadFormat('pdf')" class="bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1.5">
-          📄 PDF
-        </button>
+
+        <div class="h-5 w-px bg-slate-200 mx-0.5"></div>
+
+        <!-- Ribbon Group 6: Actions & Exports -->
+        <div class="flex items-center gap-1.5">
+          <button onclick="saveAndCompile()" class="h-8 px-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-all hover:scale-105 active:scale-95 shadow-2xs flex items-center gap-1">
+            💾 Save
+          </button>
+          <button onclick="downloadFormat('docx')" class="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-all hover:scale-105 active:scale-95 shadow-2xs flex items-center gap-1">
+            📝 DOCX
+          </button>
+          <button onclick="downloadFormat('pdf')" class="h-8 px-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition-all hover:scale-105 active:scale-95 shadow-2xs flex items-center gap-1">
+            📄 PDF
+          </button>
+        </div>
+
       </div>
     </header>
 
@@ -448,32 +496,8 @@
         </div>
 
         <!-- Resume Sheet Page Layout (A4/Letter proportions) -->
-        <div id="resume-sheet" class="hidden w-[680px] text-slate-800 text-left relative transition-all duration-300">
-          <div class="a4-page-card bg-white border border-slate-200 shadow-xl rounded-xl p-10 mb-6 relative">
-            <!-- Header Profile -->
-            <div class="flex items-center gap-6 border-b border-slate-100 pb-4 mb-6" id="cv-header-container">
-              <!-- Photo Slot Placeholder -->
-              <div id="cv-photo-container" class="relative group/photo cursor-pointer shrink-0">
-                <img id="cv-photo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23F1F5F9'/><text x='50%' y='55%' font-family='Arial' font-size='12' fill='%2394A3B8' text-anchor='middle'>Add Photo</text></svg>" class="w-20 h-20 rounded-full object-cover border border-slate-200 shadow-sm" alt="Profile Photo">
-                <input type="file" id="cv-photo-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="uploadCVPhoto()">
-                <div class="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold pointer-events-none">Update</div>
-                <!-- Remove photo button -->
-                <button onclick="removeCVPhoto(event)" id="btn-remove-photo" class="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md hidden transition-all hover:scale-110 z-20" title="Remove Photo">×</button>
-              </div>
-              <!-- Profile Text Details -->
-              <div class="flex-1 min-w-0" id="cv-header-text">
-                <h1 id="cv-name" contenteditable="true" class="text-2xl font-bold text-slate-900 tracking-tight mb-1">Candidate Name</h1>
-                <div id="cv-contact" contenteditable="true" class="text-xs text-slate-500 font-medium">
-                  email@example.com  |  +1 (555) 000-0000  |  City, Country
-                </div>
-              </div>
-            </div>
-
-            <!-- Sortable sections container -->
-            <div id="sections-list" class="space-y-6">
-              <!-- Dynamically filled -->
-            </div>
-          </div>
+        <div id="resume-sheet" class="hidden w-full max-w-[800px] text-slate-800 text-left relative transition-all duration-300">
+          <div id="sections-list"></div>
 
           <!-- Add Section trigger footer -->
           <div class="mt-8 border-t border-dashed border-slate-200 pt-6 flex gap-3 justify-center items-center" id="editor-actions-footer">

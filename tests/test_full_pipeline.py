@@ -131,3 +131,25 @@ def test_utf8_filename_download_header():
     res = client.get(f"/api/download?path={utf8_path}")
     assert res.status_code == 200
     assert "attachment;" in res.headers["content-disposition"]
+
+
+def test_easy_apply_indicator_support():
+    """Verify that Easy Apply indicators are supported across backend schemas and frontend scripts."""
+    with open("src/static/js/app.js", "r", encoding="utf-8") as f:
+        js_code = f.read()
+        
+    assert "function renderEasyApplyBadge" in js_code
+    assert "function updateBannerEasyApplyBadge" in js_code
+    assert "⚡ Easy Apply" in js_code
+    assert "🔗 External Apply" in js_code
+
+    from src.main import AutoApplyJob
+    job_model = AutoApplyJob(
+        job_url="https://linkedin.com/jobs/view/123",
+        job_title="Dev",
+        company="Co",
+        pdf_path="path.pdf",
+        easy_apply=True
+    )
+    assert job_model.easy_apply is True
+

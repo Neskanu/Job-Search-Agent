@@ -1,7 +1,7 @@
 import os
 import re
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pypdf import PdfReader
 import docx
 from docx.shared import Pt, Inches
@@ -9,10 +9,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ReportLab imports
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -82,10 +82,12 @@ def process_profile_photo(base64_data_url: str, size: int = 180, circle: bool = 
     img = img.resize((size, size), Image.LANCZOS)
 
     if circle:
-        # Create a circular mask and apply it
-        mask = Image.new("L", (size, size), 0)
+        # Create a 2x anti-aliased circular mask and apply it
+        mask_size = size * 2
+        mask = Image.new("L", (mask_size, mask_size), 0)
         draw = ImageDraw.Draw(mask)
-        draw.ellipse((0, 0, size, size), fill=255)
+        draw.ellipse((0, 0, mask_size - 1, mask_size - 1), fill=255)
+        mask = mask.resize((size, size), Image.LANCZOS)
         img.putalpha(mask)
 
     # Save as PNG to preserve alpha channel
@@ -144,67 +146,85 @@ def read_cv(file_path: str) -> str:
 
 def parse_raw_cv_to_json(cv_text: str, filename: str = "") -> Dict[str, Any]:
     """
-    Parse raw extracted CV text into structured cv_data dictionary for immediate WYSIWYG rendering.
+    Parse raw extracted CV text into structured cv_data dictionary with typed sections
+    (text, list, experience, education) for executive WYSIWYG and PDF rendering.
     """
     lines = [line.strip() for line in cv_text.split('\n') if line.strip()]
     if not lines:
         return {
-            "name": "Candidate Name",
-            "contact_info": "email@example.com | Phone",
+            "name": "Vytautas Jurgaitis",
+            "contact_info": ["vjurgaitis@gmail.com", "+37067302309", "Vilnius, Lietuva"],
             "sections": [
-                {"title": "Summary", "type": "text", "content": "Uploaded CV document."}
+                {"title": "PROFESINĖ SANTRAUKA", "type": "text", "content": "Uploaded CV document."}
             ]
         }
         
     name = lines[0]
-    if len(name) > 40 or '@' in name or 'http' in name.lower():
+    if len(name) > 40 or '@' in name or 'http' in name.lower() or len(name.split()) > 4:
         base = os.path.splitext(filename)[0] if filename else "Candidate"
         name = base.replace('_', ' ').replace('-', ' ').title()
         
     contact_parts = []
-    for line in lines[1:5]:
-        if '@' in line or re.search(r'\d{3}', line) or 'http' in line.lower() or 'linkedin' in line.lower():
-            contact_parts.append(line)
-            
-    contact_info = " | ".join(contact_parts) if contact_parts else (lines[1] if len(lines) > 1 else "")
+    contact_info = " | ".join(contact_parts) if contact_parts else (lines[1] if len(lines) > 1 else "vjurgaitis@gmail.com")
     
     sections = []
     current_section = None
+    current_bullets = []
     
-    section_keywords = {
-        'summary': 'Summary',
-        'profile': 'Summary',
-        'experience': 'Professional Experience',
-        'employment': 'Professional Experience',
-        'work history': 'Professional Experience',
-        'education': 'Education',
-        'skills': 'Skills',
-        'projects': 'Projects',
-        'certifications': 'Certifications'
+    # Enhanced Section Keywords (Lithuanian & English)
+    section_map = {
+        'santrauka': ('PROFESINĖ SANTRAUKA', 'text'),
+        'profesinė santrauka': ('PROFESINĖ SANTRAUKA', 'text'),
+        'summary': ('PROFESINĖ SANTRAUKA', 'text'),
+        'profile': ('PROFESINĖ SANTRAUKA', 'text'),
+        'about': ('PROFESINĖ SANTRAUKA', 'text'),
+        'kompetencijos': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'pagrindinės kompetencijos': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'gebiėjimai': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'skills': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'core skills': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'technical skills': ('PAGRINDINĖS KOMPETENCIJOS', 'list'),
+        'darbo patirtis': ('DARBO PATIRTIS', 'experience'),
+        'patirtis': ('DARBO PATIRTIS', 'experience'),
+        'experience': ('DARBO PATIRTIS', 'experience'),
+        'work experience': ('DARBO PATIRTIS', 'experience'),
+        'employment': ('DARBO PATIRTIS', 'experience'),
+        'išsilavinimas': ('IŠSILAVINIMAS', 'education'),
+        'moksla': ('IŠSILAVINIMAS', 'education'),
+        'education': ('IŠSILAVINIMAS', 'education'),
+        'kalbos': ('KALBOS', 'list'),
+        'languages': ('KALBOS', 'list'),
+        'projektai': ('PROJEKTAI', 'text'),
+        'projects': ('PROJEKTAI', 'text'),
+        'sertifikatai': ('SERTIFIKATAI', 'list'),
+        'certifications': ('SERTIFIKATAI', 'list')
     }
     
     body_lines = lines[1:] if len(lines) > 1 else lines
-    current_bullets = []
     
     for line in body_lines:
-        line_lower = line.lower()
-        matched_title = None
-        for kw, title in section_keywords.items():
-            if line_lower == kw or line_lower == f"{kw}:" or line_lower.startswith(f"{kw} "):
-                matched_title = title
+        line_clean = line.strip().strip(':').strip('-').strip('•').strip()
+        line_lower = line_clean.lower()
+        
+        matched = None
+        for kw, (canon_title, canon_type) in section_map.items():
+            if line_lower == kw or line_lower.startswith(f"{kw} "):
+                matched = (canon_title, canon_type)
                 break
                 
-        if matched_title:
+        if matched:
             if current_section:
                 if current_bullets:
-                    current_section["content"] = current_bullets
+                    if current_section["type"] == "experience" or current_section["type"] == "education":
+                        current_section["content"] = [{"role": "Position", "company": "Company", "period": "2020 - Present", "bullets": current_bullets}]
+                    else:
+                        current_section["content"] = current_bullets
                 sections.append(current_section)
             current_bullets = []
-            sec_type = "list" if matched_title == "Skills" else "text"
-            current_section = {"title": matched_title, "type": sec_type, "content": ""}
+            current_section = {"title": matched[0], "type": matched[1], "content": ""}
         else:
             if not current_section:
-                current_section = {"title": "Summary", "type": "text", "content": ""}
+                current_section = {"title": "PROFESINĖ SANTRAUKA", "type": "text", "content": ""}
                 
             if current_section["type"] == "text":
                 if current_section["content"]:
@@ -216,11 +236,14 @@ def parse_raw_cv_to_json(cv_text: str, filename: str = "") -> Dict[str, Any]:
                 
     if current_section:
         if current_bullets:
-            current_section["content"] = current_bullets
+            if current_section["type"] in ["experience", "education"]:
+                current_section["content"] = [{"role": "Position", "company": "Company", "period": "2020 - Present", "bullets": current_bullets}]
+            else:
+                current_section["content"] = current_bullets
         sections.append(current_section)
         
     if not sections:
-        sections = [{"title": "CV Content", "type": "text", "content": cv_text[:1000]}]
+        sections = [{"title": "PROFESINĖ SANTRAUKA", "type": "text", "content": cv_text[:1000]}]
         
     return {
         "name": name,
@@ -228,7 +251,7 @@ def parse_raw_cv_to_json(cv_text: str, filename: str = "") -> Dict[str, Any]:
         "sections": sections
     }
 
-def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist") -> None:
+def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist", custom_color: Optional[str] = None, bullet_symbol: str = "│") -> None:
     """Save CV JSON data to a styled DOCX file."""
     doc = docx.Document()
     
@@ -254,6 +277,16 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
     name_align = WD_ALIGN_PARAGRAPH.CENTER
     contact_align = WD_ALIGN_PARAGRAPH.CENTER
     headings_align = WD_ALIGN_PARAGRAPH.LEFT
+    
+    if custom_color and custom_color.startswith('#') and len(custom_color) == 7:
+        try:
+            r = int(custom_color[1:3], 16)
+            g = int(custom_color[3:5], 16)
+            b = int(custom_color[5:7], 16)
+            heading_color = docx.shared.RGBColor(r, g, b)
+            name_color = docx.shared.RGBColor(r, g, b)
+        except Exception:
+            pass
     
     # Theme overrides
     if theme == "executive":
@@ -417,32 +450,38 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
         p_line_run = p_line.add_run(line_chars)
         p_line_run.font.size = Pt(6)
         p_line_run.font.color.rgb = line_color
-        
+             
         if sec_type == "text":
             p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(2)
             p.paragraph_format.space_after = Pt(8)
+            p.paragraph_format.left_indent = Pt(0)
             p.paragraph_format.line_spacing = 1.15
             run = p.add_run(str(content))
             run.font.name = font_name
             run.font.size = body_size
+            run.font.italic = True if theme in ["executive", "academic"] else False
+            run.font.color.rgb = docx.shared.RGBColor(51, 65, 85)
             
         elif sec_type == "list":
             if isinstance(content, list):
-                skills_text = ", ".join(str(item) for item in content)
+                skills_text = "  │  ".join(str(item) for item in content)
             else:
                 skills_text = str(content)
             p = doc.add_paragraph()
             p.paragraph_format.space_after = Pt(8)
+            p.paragraph_format.left_indent = Pt(0)
             p.paragraph_format.line_spacing = 1.15
             run = p.add_run(skills_text)
             run.font.name = font_name
             run.font.size = body_size
+            run.font.color.rgb = heading_color
                 
         elif sec_type == "experience" or sec_type == "education":
             if isinstance(content, list):
                 for idx, item in enumerate(content):
                     exp_p = doc.add_paragraph()
-                    exp_p.paragraph_format.space_before = Pt(4) if idx > 0 else Pt(0)
+                    exp_p.paragraph_format.space_before = Pt(6) if idx > 0 else Pt(2)
                     exp_p.paragraph_format.space_after = Pt(2)
                     exp_p.paragraph_format.keep_with_next = True
                     
@@ -450,48 +489,61 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
                         role = item.get("role", "")
                         company = item.get("company", "")
                         title_str = f"{role}"
-                        company_str = f" - {company}" if company else ""
+                        company_str = f" @ {company}" if company else ""
                     else:
                         degree = item.get("degree", "")
                         institution = item.get("institution", "")
                         title_str = f"{degree}"
-                        company_str = f" - {institution}" if institution else ""
+                        company_str = f" @ {institution}" if institution else ""
                         
                     period = item.get("period", "")
                     location = item.get("location", "")
                     
                     r_title = exp_p.add_run(title_str)
                     r_title.font.name = font_name
-                    r_title.font.size = body_size
+                    r_title.font.size = body_size + Pt(1)
+                    r_title.font.color.rgb = heading_color
                     r_title.bold = True
                     
-                    r_comp = exp_p.add_run(company_str)
-                    r_comp.font.name = font_name
-                    r_comp.font.size = body_size
-                    r_comp.italic = True
+                    if company_str:
+                        r_comp = exp_p.add_run(company_str)
+                        r_comp.font.name = font_name
+                        r_comp.font.size = body_size
+                        r_comp.font.color.rgb = docx.shared.RGBColor(71, 85, 105)
+                        r_comp.bold = True
                     
                     meta_parts = []
-                    if location:
-                        meta_parts.append(location)
                     if period:
                         meta_parts.append(period)
+                    if location:
+                        meta_parts.append(location)
                         
                     if meta_parts:
-                        meta_str = f" ({', '.join(meta_parts)})"
+                        meta_str = f"  │  {' │ '.join(meta_parts)}"
                         r_meta = exp_p.add_run(meta_str)
                         r_meta.font.name = font_name
                         r_meta.font.size = meta_size
                         r_meta.font.color.rgb = meta_color
+                        r_meta.italic = True
                         
                     bullets = item.get("bullets", [])
                     if isinstance(bullets, list):
                         for bullet in bullets:
-                            bp = doc.add_paragraph(style='List Bullet')
+                            bp = doc.add_paragraph()
+                            bp.paragraph_format.left_indent = Pt(12)
                             bp.paragraph_format.space_after = Pt(2)
                             bp.paragraph_format.line_spacing = 1.1
+                            
+                            b_marker = bp.add_run(f"{bullet_symbol}  ")
+                            b_marker.font.name = font_name
+                            b_marker.font.size = body_size - Pt(1)
+                            b_marker.font.color.rgb = heading_color
+                            b_marker.bold = True
+                            
                             brun = bp.add_run(str(bullet))
                             brun.font.name = font_name
-                            brun.font.size = body_size - Pt(1) # slightly smaller bullets
+                            brun.font.size = body_size - Pt(1)
+                            brun.font.color.rgb = docx.shared.RGBColor(51, 65, 85)
             else:
                 p = doc.add_paragraph()
                 p.paragraph_format.space_after = Pt(8)
@@ -501,15 +553,15 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
                 
     doc.save(output_path)
 
-def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist") -> None:
+def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist", custom_color: Optional[str] = None, line_style: str = "short", bullet_symbol: str = "│", layout_mode: str = "2col") -> None:
     """Save CV JSON data to an ATS-friendly, professional PDF using ReportLab."""
     doc = SimpleDocTemplate(
         output_path,
         pagesize=letter,
-        leftMargin=54,  # 0.75 inch
-        rightMargin=54,
-        topMargin=54,
-        bottomMargin=54
+        leftMargin=36,  # reduced margin (0.5 inch)
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36
     )
     
     styles = getSampleStyleSheet()
@@ -636,25 +688,38 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         heading_line_color = colors.HexColor('#1A1A1A')
         
         body_font = u_reg
-        body_size = 10.5
-        body_leading = 14.5
-        body_color = colors.HexColor('#1A1A1A')
-        
-        bullet_font = u_reg
-        bullet_size = 10
-        bullet_leading = 14
-        bullet_color = colors.HexColor('#1A1A1A')
+
+    body_font = font_regular
+    body_size = 9.5
+    body_leading = 13.5
+    body_color = colors.HexColor('#334155')
+
+    bullet_font = font_regular
+    bullet_size = 9
+    bullet_leading = 13
+    bullet_color = colors.HexColor('#334155')
+
+    # Override colors if custom_color provided
+    title_color_hex = "#1E3A8A" if theme == "executive" else ("#0F766E" if theme == "creative" else ("#0F172A" if theme == "tech" else "#111827"))
+    if custom_color and custom_color.startswith('#') and len(custom_color) == 7:
+        try:
+            heading_color = colors.HexColor(custom_color)
+            heading_line_color = colors.HexColor(custom_color)
+            name_color = colors.HexColor(custom_color)
+            title_color_hex = custom_color
+        except Exception:
+            pass
 
     # Custom Styles
     style_name = ParagraphStyle(
         'CVName',
         parent=styles['Normal'],
         fontName=name_font,
-        fontSize=name_size,
-        leading=name_leading,
-        textColor=name_color,
+        fontSize=18,
+        leading=22,
+        textColor=colors.white,
         alignment=name_align,
-        spaceAfter=6
+        spaceAfter=3
     )
     
     style_contact = ParagraphStyle(
@@ -663,9 +728,9 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         fontName=contact_font,
         fontSize=contact_size,
         leading=contact_leading,
-        textColor=contact_color,
+        textColor=colors.HexColor('#CCFBF1'),
         alignment=contact_align,
-        spaceAfter=15
+        spaceAfter=0
     )
     
     style_heading = ParagraphStyle(
@@ -676,8 +741,9 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         leading=heading_leading,
         textColor=heading_color,
         alignment=heading_align,
-        spaceBefore=12,
-        spaceAfter=4,
+        leftIndent=0,
+        spaceBefore=6,
+        spaceAfter=2,
         keepWithNext=True
     )
     
@@ -688,7 +754,7 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         fontSize=body_size,
         leading=body_leading,
         textColor=body_color,
-        spaceAfter=8
+        spaceAfter=4
     )
     
     style_bullet = ParagraphStyle(
@@ -698,187 +764,216 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         fontSize=bullet_size,
         leading=bullet_leading,
         textColor=bullet_color,
-        leftIndent=15,
-        firstLineIndent=-10,
-        spaceAfter=3
+        leftIndent=8,
+        firstLineIndent=-6,
+        spaceAfter=2
     )
     
     story = []
     
-    # 1. Header (Name, Contact, Photo)
-    photo_data = cv_data.get("photo")
+    # Handle profile photo
     image_flowable = None
-    if photo_data and "," in photo_data:
+    photo_raw = cv_data.get("photo")
+    if photo_raw and isinstance(photo_raw, str) and photo_raw.startswith("data:image"):
         try:
-            from reportlab.platypus import Image
-            # process_profile_photo auto-corrects EXIF rotation and applies a circular mask
-            img_buf = process_profile_photo(photo_data, size=200, circle=True)
-            image_flowable = Image(img_buf, width=65, height=65)
-            image_flowable.hAlign = 'CENTER'
+            import base64
+            from io import BytesIO
+            header, base64_data = photo_raw.split(",", 1)
+            img_bytes = base64.b64decode(base64_data)
+            
+            if "image/svg" in header:
+                from PIL import Image, ImageDraw
+                im = Image.new('RGBA', (120, 120), (15, 118, 110, 255))
+                draw = ImageDraw.Draw(im)
+                draw.ellipse((10, 10, 110, 110), outline=(255, 255, 255, 255), width=4)
+                buf = BytesIO()
+                im.save(buf, format='PNG')
+                buf.seek(0)
+                from reportlab.platypus import Image as RLImage
+                image_flowable = RLImage(buf, width=44, height=44)
+            else:
+                image_buf = process_profile_photo(photo_raw, size=200, circle=True)
+                from reportlab.platypus import Image as RLImage
+                image_flowable = RLImage(image_buf, width=44, height=44)
         except Exception as img_err:
             print(f"Error parsing PDF photo: {img_err}")
 
-    # Process contact info text
+    # Process contact info text & Unicode safe bullet symbol
+    def get_safe_bullet_symbol(sym: str) -> str:
+        s = (sym or "").strip()
+        if s in ["▸", "arrow", "Arrow"]:
+            return "&#9656;"
+        elif s in ["◆", "diamond", "Diamond"]:
+            return "&#9670;"
+        elif s in ["•", "circle", "Circle"]:
+            return "&#8226;"
+        elif s in ["│", "pipe", "Pipe"]:
+            return "&#9474;"
+        return s if s else "&#9474;"
+
+    b_sym = get_safe_bullet_symbol(bullet_symbol)
     contact_info = cv_data.get("contact_info", "")
     if isinstance(contact_info, list):
-        contact_text = "  |  ".join(contact_info)
+        contact_text = f"  {b_sym}  ".join(contact_info)
     else:
         contact_text = str(contact_info)
 
-    # Build Header Layout based on theme and photo
-    if theme == "creative":
-        from reportlab.platypus import Table, TableStyle
-        name_style_white = ParagraphStyle(
-            'CreativeName', parent=style_name, textColor=colors.white, alignment=TA_LEFT if image_flowable else TA_CENTER
-        )
-        contact_style_white = ParagraphStyle(
-            'CreativeContact', parent=style_contact, textColor=colors.HexColor('#CCFBF1'), alignment=TA_LEFT if image_flowable else TA_CENTER, spaceAfter=0
-        )
-        
-        if image_flowable:
-            image_flowable.hAlign = 'LEFT'
-            text_story = [
-                Paragraph(cv_data.get("name", "Your Name"), name_style_white),
-                Paragraph(contact_text, contact_style_white)
-            ]
-            header_table = Table([[image_flowable, text_story]], colWidths=[80, 424])
-        else:
-            text_story = [
-                Paragraph(cv_data.get("name", "Your Name"), name_style_white),
-                Paragraph(contact_text, contact_style_white)
-            ]
-            header_table = Table([[text_story]], colWidths=[504])
-            
-        header_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#0F766E')),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('LEFTPADDING', (0,0), (-1,-1), 18),
-            ('RIGHTPADDING', (0,0), (-1,-1), 18),
-            ('TOPPADDING', (0,0), (-1,-1), 18),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 18),
-        ]))
-        story.append(header_table)
-        story.append(Spacer(1, 15))
-        
-    elif theme in ["minimalist", "academic"]:
-        if image_flowable:
-            story.append(image_flowable)
-            story.append(Spacer(1, 6))
-        story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
-        story.append(Paragraph(contact_text, style_contact))
+    from reportlab.platypus import Table, TableStyle
+    text_story = [
+        Paragraph(cv_data.get("name", "Your Name"), style_name),
+        Paragraph(contact_text, style_contact)
+    ]
+
+    if image_flowable:
+        header_table = Table([[image_flowable, text_story]], colWidths=[65, 475])
     else:
-        # executive and tech themes (left-aligned)
-        if image_flowable:
-            from reportlab.platypus import Table, TableStyle
-            image_flowable.hAlign = 'LEFT'
-            
-            text_story = [
-                Paragraph(cv_data.get("name", "Your Name"), ParagraphStyle(
-                    'SubName', parent=style_name, alignment=TA_LEFT, spaceAfter=2
-                )),
-                Paragraph(contact_text, ParagraphStyle(
-                    'SubContact', parent=style_contact, alignment=TA_LEFT, spaceAfter=0
-                ))
-            ]
-            
-            header_table = Table([[image_flowable, text_story]], colWidths=[80, None])
-            header_table.setStyle(TableStyle([
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('LEFTPADDING', (0,0), (-1,-1), 0),
-                ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                ('TOPPADDING', (0,0), (-1,-1), 0),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ]))
-            story.append(header_table)
-            story.append(Spacer(1, 12))
-        else:
-            story.append(Paragraph(cv_data.get("name", "Your Name"), style_name))
-            story.append(Paragraph(contact_text, style_contact))
-    
-    # 3. Sections
-    for sec in cv_data.get("sections", []):
-        title = sec.get("title", "")
+        header_table = Table([[text_story]], colWidths=[540])
+        
+    header_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(title_color_hex)),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('LEFTPADDING', (0,0), (-1,-1), 14),
+        ('RIGHTPADDING', (0,0), (-1,-1), 14),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 6))
+
+    # Helper function to build flowable elements for a section
+    def build_pdf_section_elements(sec: Dict[str, Any], max_width: int = 540) -> List[Any]:
+        sec_elements = []
+        sec_title = sec.get("title", "")
         sec_type = sec.get("type", "")
-        content = sec.get("content")
-        
-        if not title or content is None:
-            continue
-            
-        # Section Header
-        story.append(Paragraph(title.upper(), style_heading))
-        # Thin divider line under header
-        story.append(HRFlowable(
-            width="100%", 
-            thickness=0.75 if theme in ["executive", "creative"] else 0.5, 
-            color=heading_line_color, 
-            spaceBefore=1, 
-            spaceAfter=8
-        ))
-        
+        sec_content = sec.get("content")
+
+        if not sec_title or sec_content is None:
+            return sec_elements
+
+        sec_heading = Paragraph(sec_title.upper(), style_heading)
+        sec_hr = HRFlowable(
+            width="100%",
+            thickness=1.0,
+            color=heading_line_color,
+            spaceBefore=1,
+            spaceAfter=4,
+        )
+        sec_hr.keepWithNext = True
+        # Append heading and line separator directly; keepWithNext ensures they stay together
+        sec_elements.append(sec_heading)
+        sec_elements.append(sec_hr)
+
+        accent_bar_color = colors.HexColor(title_color_hex)
+        line_w = 2.5 if line_style in ["short", "full"] else 0
+
         if sec_type == "text":
-            story.append(Paragraph(str(content), style_body))
-            
+            p_text = Paragraph(f"<font size='9' color='#334155'>{str(sec_content)}</font>", ParagraphStyle(f'TextSec_{sec_title}', parent=styles['Normal'], fontName=font_regular, leading=13))
+            from reportlab.platypus import Table, TableStyle
+            text_table = Table([[p_text]], colWidths=[max_width])
+            t_style = [
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('LEFTPADDING', (0,0), (-1,-1), 6),
+                ('RIGHTPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+            ]
+            if line_w > 0:
+                t_style.append(('LINEBEFORE', (0,0), (0,-1), line_w, accent_bar_color))
+            text_table.setStyle(TableStyle(t_style))
+            sec_elements.append(text_table)
+
         elif sec_type == "list":
-            if isinstance(content, list):
-                skills_text = ", ".join(str(item) for item in content)
-                story.append(Paragraph(skills_text, style_body))
+            if isinstance(sec_content, list):
+                for item in sec_content:
+                    item_text = f"<font color='{title_color_hex}'><b>{b_sym}</b></font> &nbsp;<b>{item}</b>"
+                    sec_elements.append(Paragraph(item_text, style_body))
             else:
-                story.append(Paragraph(str(content), style_body))
-                
-        elif sec_type == "experience" or sec_type == "education":
-            if isinstance(content, list):
-                for idx, item in enumerate(content):
-                    # Space out experience blocks
+                sec_elements.append(Paragraph(str(sec_content), style_body))
+
+        elif sec_type in ["experience", "education"]:
+            if isinstance(sec_content, list):
+                from reportlab.platypus import Table, TableStyle
+                for idx, item in enumerate(sec_content):
                     if idx > 0:
-                        story.append(Spacer(1, 4))
-                        
-                    if sec_type == "experience":
-                        role = item.get("role", "")
-                        company = item.get("company", "")
-                        title_str = f"<b>{role}</b>"
-                        company_str = f" &nbsp;-&nbsp; <i>{company}</i>" if company else ""
-                    else:
-                        degree = item.get("degree", "")
-                        institution = item.get("institution", "")
-                        title_str = f"<b>{degree}</b>"
-                        company_str = f" &nbsp;-&nbsp; <i>{institution}</i>" if institution else ""
-                        
+                        sec_elements.append(Spacer(1, 3))
+
+                    title_val = item.get("role", "") if sec_type == "experience" else item.get("degree", "")
+                    comp_val = item.get("company", "") if sec_type == "experience" else item.get("institution", "")
                     period = item.get("period", "")
                     location = item.get("location", "")
-                    
-                    # Create meta details
-                    meta_parts = []
-                    if location:
-                        meta_parts.append(location)
+
+                    left_html = f"<b><font size='9.5' color='{title_color_hex}'>{title_val}</font></b>"
+                    if comp_val:
+                        left_html += f"<br/><font size='8.5' color='#475569'><b>{comp_val}</b></font>"
+
+                    right_parts = []
                     if period:
-                        meta_parts.append(period)
-                        
-                    meta_str = ""
-                    if meta_parts:
-                        meta_str = f" <font color='#666666'>({', '.join(meta_parts)})</font>"
-                        
-                    block_header = f"{title_str}{company_str}{meta_str}"
-                    
-                    # Section block header
-                    story.append(Paragraph(block_header, ParagraphStyle(
-                        'BlockHeader',
-                        parent=styles['Normal'],
-                        fontName=font_regular,
-                        fontSize=body_size,
-                        leading=body_leading - 1,
-                        spaceAfter=3,
-                        keepWithNext=True
-                    )))
-                    
-                    # Bullets
+                        right_parts.append(f"<b>{period}</b>")
+                    if location:
+                        right_parts.append(f"<i>{location}</i>")
+                    right_html = "<br/>".join(right_parts) if right_parts else ""
+
+                    left_p = Paragraph(left_html, ParagraphStyle(f'ExpLeft_{idx}', parent=styles['Normal'], fontName=font_bold, leading=11))
+                    right_p = Paragraph(f"<font size='8' color='#64748B'>{right_html}</font>", ParagraphStyle(f'ExpRight_{idx}', parent=styles['Normal'], fontName=font_regular, alignment=TA_RIGHT, leading=10))
+
+                    r_width = min(120, int(max_width * 0.35))
+                    l_width = max_width - r_width
+                    item_table = Table([[left_p, right_p]], colWidths=[l_width, r_width])
+                    i_style = [
+                        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                        ('LEFTPADDING', (0,0), (0,0), 4),
+                        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                        ('TOPPADDING', (0,0), (-1,-1), 1),
+                        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                    ]
+                    if line_w > 0:
+                        i_style.append(('LINEBEFORE', (0,0), (0,-1), line_w, accent_bar_color))
+                    item_table.setStyle(TableStyle(i_style))
+                    sec_elements.append(item_table)
+
                     bullets = item.get("bullets", [])
                     if isinstance(bullets, list):
+                        bullet_color_hex = title_color_hex
                         for bullet in bullets:
-                            bullet_text = f"&bull; {bullet}"
-                            story.append(Paragraph(bullet_text, style_bullet))
+                            bullet_text = f"<font color='{bullet_color_hex}'><b>{b_sym}</b></font> &nbsp;{bullet}"
+                            sec_elements.append(Paragraph(bullet_text, style_bullet))
             else:
-                story.append(Paragraph(str(content), style_body))
-                
+                sec_elements.append(Paragraph(str(sec_content), style_body))
+
+        return sec_elements
+
+    # 3. Layout Render (2-Column Sidebar vs 1-Column Standard)
+    if layout_mode == "2col":
+        from reportlab.platypus import Table, TableStyle
+        left_secs = [s for s in cv_data.get("sections", []) if s.get("type") in ["list", "education"]]
+        right_secs = [s for s in cv_data.get("sections", []) if s.get("type") not in ["list", "education"]]
+
+        max_num_secs = max(len(left_secs), len(right_secs))
+        for i in range(max_num_secs):
+            l_sec = left_secs[i] if i < len(left_secs) else None
+            r_sec = right_secs[i] if i < len(right_secs) else None
+
+            l_flowables = build_pdf_section_elements(l_sec, max_width=175) if l_sec else []
+            r_flowables = build_pdf_section_elements(r_sec, max_width=345) if r_sec else []
+
+            if l_flowables or r_flowables:
+                sec_table = Table([[l_flowables, r_flowables]], colWidths=[180, 360])
+                sec_table.setStyle(TableStyle([
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('LEFTPADDING', (0,0), (0,0), 0),
+                    ('RIGHTPADDING', (0,0), (0,0), 8),
+                    ('LEFTPADDING', (1,0), (1,0), 10),
+                    ('RIGHTPADDING', (1,0), (1,0), 0),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('LINEAFTER', (0,0), (0,-1), 0.75, colors.HexColor('#E2E8F0')),
+                ]))
+                story.append(sec_table)
+    else:
+        for sec in cv_data.get("sections", []):
+            story.extend(build_pdf_section_elements(sec, max_width=540))
+
     # Build Document
     if theme == "executive":
         def draw_executive_decorations(canvas, doc):

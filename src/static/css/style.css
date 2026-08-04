@@ -2,13 +2,13 @@
    🎨 GLOBAL & CONSOLE SIDEBAR STYLES
    ========================================================================== */
 
-/* Custom Font Family */
 html, body {
   font-family: 'Outfit', sans-serif;
   height: 100%;
+  background-color: #F1F5F9;
 }
 
-/* Custom Webkit Scrollbars for Sidebars and Lists */
+/* Custom Webkit Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -24,75 +24,233 @@ html, body {
   background: rgba(148, 163, 184, 0.5);
 }
 
-/* Config panel elements overrides */
 select, input, textarea {
   transition: all 0.2s ease;
 }
 
 /* ==========================================================================
-   📄 WYSIWYG RESUME CANVAS STYLE ACCENTS
+   📄 EXECUTIVE WYSIWYG RESUME CANVAS SYSTEM
    ========================================================================== */
 
-/* Draggable Resume Sections */
+:root {
+  --theme-accent: #0F766E;
+  --theme-accent-light: #CCFBF1;
+}
+
+/* A4 Sheet Canvas Container */
+.a4-page-card {
+  width: 100% !important;
+  max-width: 800px !important;
+  min-height: 1050px !important;
+  background-color: #FFFFFF !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 6px !important;
+  padding: 0 !important;
+  margin: 0 auto 2rem auto !important;
+  overflow: hidden !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* Header Banner Theme Variations */
+.cv-header-banner {
+  background: var(--theme-accent, #0F766E);
+  color: #FFFFFF;
+  padding: 1.75rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.25s ease;
+}
+
+.theme-creative .cv-header-banner { background: linear-gradient(135deg, var(--theme-accent, #0F766E) 0%, color-mix(in srgb, var(--theme-accent, #0F766E) 80%, white) 100%) !important; }
+.theme-executive .cv-header-banner { background: linear-gradient(135deg, var(--theme-accent, #1E3A8A) 0%, color-mix(in srgb, var(--theme-accent, #1E3A8A) 70%, black) 100%) !important; }
+.theme-tech .cv-header-banner { background: linear-gradient(135deg, var(--theme-accent, #0F172A) 0%, color-mix(in srgb, var(--theme-accent, #0F172A) 70%, #1E293B) 100%) !important; }
+.theme-academic .cv-header-banner { background: linear-gradient(135deg, var(--theme-accent, #334155) 0%, color-mix(in srgb, var(--theme-accent, #334155) 70%, #475569) 100%) !important; }
+.theme-minimalist .cv-header-banner { background: linear-gradient(135deg, var(--theme-accent, #E11D48) 0%, color-mix(in srgb, var(--theme-accent, #E11D48) 80%, black) 100%) !important; }
+
+.theme-executive .sec-title { color: var(--theme-accent, #1E3A8A) !important; font-family: Georgia, serif !important; }
+.theme-tech .sec-title { color: var(--theme-accent, #0F172A) !important; font-family: Consolas, monospace !important; }
+.theme-academic .sec-title { color: var(--theme-accent, #334155) !important; font-family: Georgia, serif !important; }
+.theme-minimalist .sec-title { color: var(--theme-accent, #E11D48) !important; font-family: Outfit, sans-serif !important; }
+
+.cv-header-banner .cv-photo-frame {
+  width: 72px;
+  height: 72px;
+  border-radius: 9999px;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Draggable Resume Section Container */
 .draggable-section {
   position: relative;
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-left: -12px;
-  margin-right: -12px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 6px;
+  padding: 4px;
+  transition: all 0.2s ease;
 }
 
 .draggable-section:hover {
-  border-color: #E2E8F0;
-  background-color: #F8FAFC;
+  border-color: #CBD5E1;
+  background-color: rgba(248, 250, 252, 0.8);
 }
 
-/* Drag Handle */
+/* Section Header Bar */
+.sec-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1.5px solid var(--theme-accent, #0F766E);
+  padding-bottom: 3px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.sec-title {
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  color: var(--theme-accent, #0F766E) !important;
+  margin: 0 !important;
+}
+
+/* Drag Handle & Section Toolbar (Hover only, never overlaps text) */
+.sec-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.draggable-section:hover .sec-tools {
+  opacity: 1;
+}
+
 .drag-handle {
-  display: none;
-  position: absolute;
-  left: -20px;
-  top: 12px;
   cursor: grab;
   color: #94A3B8;
-  font-size: 15px;
-  padding: 4px;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
 }
-
+.drag-handle:hover {
+  background-color: #E2E8F0;
+  color: #334155;
+}
 .drag-handle:active {
   cursor: grabbing;
-}
-
-.draggable-section:hover .drag-handle {
-  display: block;
 }
 
 /* Contenteditable box focus borders */
 [contenteditable="true"] {
   transition: background-color 0.15s ease, outline 0.15s ease;
+  border-radius: 3px;
 }
 
 [contenteditable="true"]:focus {
-  outline: 2px solid #E94057 !important;
+  outline: 2px solid var(--theme-accent, #0F766E) !important;
   background-color: #F8FAFC !important;
-  border-radius: 4px;
-  padding: 1px 3px;
 }
 
-/* Drag and Drop Ghost Class (Placeholder while dragging) */
+/* Drag and Drop Ghost Class */
 .ghost-class {
   opacity: 0.35;
   background-color: #F1F5F9 !important;
   border: 2px dashed #94A3B8 !important;
 }
 
-/* ==========================================================================
-   ✨ UTILITIES & ANIMATIONS
-   ========================================================================== */
+/* Item block indicators */
+.item-block {
+  transition: all 0.2s ease !important;
+  margin-bottom: 0.75rem;
+}
 
-/* Fade Animation for tab content loading */
+/* 📏 Shorter Line Style (Default) */
+.line-style-short .item-block,
+.line-style-short .sec-content[contenteditable="true"] {
+  border-left: none !important;
+  position: relative !important;
+  padding-left: 0.85rem !important;
+}
+.line-style-short .item-block::before,
+.line-style-short .sec-content[contenteditable="true"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 3.5px;
+  height: 18px; /* Shorter 18px vertical pill line */
+  background-color: var(--theme-accent, #0F766E);
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+/* 📏 Full Height Line Style */
+.line-style-full .item-block,
+.line-style-full .sec-content[contenteditable="true"] {
+  border-left: 3px solid var(--theme-accent, #0F766E) !important;
+  padding-left: 0.85rem !important;
+}
+
+/* 📏 None Line Style */
+.line-style-none .item-block,
+.line-style-none .sec-content[contenteditable="true"] {
+  border-left: none !important;
+  padding-left: 0.25rem !important;
+}
+.line-style-none .item-block::before,
+.line-style-none .sec-content[contenteditable="true"]::before {
+  display: none !important;
+}
+
+/* Bullet marker styles */
+.bullet-marker {
+  color: var(--theme-accent, #0F766E) !important;
+}
+
+/* 📐 2-Column Sidebar Grid Layout */
+.cv-2col-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 900px;
+}
+.cv-2col-sidebar {
+  background-color: #F8FAFC;
+  border-right: 1px solid #E2E8F0;
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.cv-2col-main {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* 📄 1-Column Layout */
+.cv-1col-layout {
+  padding: 1.75rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Skills list styling */
+.skill-item-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+/* Animations */
 .tab-content {
   animation: fadeIn 0.3s ease;
 }
@@ -107,187 +265,3 @@ select, input, textarea {
     transform: translateY(0);
   }
 }
-
-/* Item block indicators */
-.item-block {
-  transition: border-color 0.2s ease;
-}
-
-.item-block:hover {
-  border-color: #CBD5E1;
-}
-
-/* ==========================================================================
-   📄 PAGE BREAK OVERLAY & TEMPLATE LAYOUT THEMES
-   ========================================================================== */
-
-#resume-sheet {
-  position: relative;
-  transition: all 0.3s ease;
-  overflow: visible !important;
-  background-color: transparent !important;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    #FFFFFF 0px,
-    #FFFFFF 859px,
-    #E2E8F0 859px, /* Page bottom border line */
-    #E2E8F0 860px,
-    #FAFAFB 860px, /* Workspace background color gap (20px) */
-    #FAFAFB 879px,
-    #E2E8F0 879px, /* Next page top border line */
-    #E2E8F0 880px
-  ) !important;
-  background-size: 100% 880px !important;
-  background-repeat: repeat-y !important;
-  border-top: none !important;
-  border-bottom: none !important;
-  border-left: 1px solid #E2E8F0 !important;
-  border-right: 1px solid #E2E8F0 !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-}
-
-/* Hide the absolute ::after overlay since background repeating-linear-gradient sits behind text natively */
-#resume-sheet::after {
-  display: none !important;
-}
-
-/* Padding for inner content since sheet padding is removed for page backgrounds */
-#resume-sheet > div {
-  padding-left: 3.5rem !important;
-  padding-right: 3.5rem !important;
-}
-#resume-sheet > div:first-child {
-  padding-top: 3.5rem !important;
-}
-#sections-list {
-  padding-bottom: 3.5rem !important;
-}
-
-/* 🎨 THEME 1: Minimalist Classic (Default CSS rules inherited mostly) */
-.theme-minimalist {
-  font-family: 'Outfit', sans-serif !important;
-}
-.theme-minimalist #cv-header-container {
-  flex-direction: column !important;
-  align-items: center !important;
-  text-align: center !important;
-}
-.theme-minimalist #cv-header-text {
-  text-align: center !important;
-}
-
-/* 🎨 THEME 2: Modern Executive (Navy / Left-Border accent) */
-.theme-executive {
-  font-family: 'Outfit', sans-serif !important;
-  border-left: 6px solid #1E293B !important;
-  padding-left: 3rem !important;
-  border-radius: 4px 12px 12px 4px !important;
-}
-.theme-executive #cv-name {
-  text-align: left !important;
-  font-family: Georgia, serif !important;
-  color: #1E3A8A !important; /* Dark navy */
-  font-weight: 700 !important;
-}
-.theme-executive #cv-contact {
-  text-align: left !important;
-  color: #475569 !important;
-}
-.theme-executive .sec-title {
-  font-family: Georgia, serif !important;
-  color: #1E3A8A !important;
-  border-bottom: 2px solid #3B82F6 !important; /* Blue line */
-}
-
-/* 🎨 THEME 3: Creative Teal (Solid Teal Header Block) */
-.theme-creative {
-  font-family: 'Outfit', sans-serif !important;
-  padding-top: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  border-radius: 12px !important;
-}
-.theme-creative #cv-header-container {
-  background: linear-gradient(135deg, #0F766E 0%, #0D9488 100%) !important;
-  padding: 3rem 2.5rem !important;
-  margin-bottom: 2rem !important;
-  border-bottom: none !important;
-  border-radius: 12px 12px 0 0 !important;
-}
-.theme-creative #cv-name {
-  color: #FFFFFF !important;
-  font-weight: 800 !important;
-  letter-spacing: -0.025em !important;
-}
-.theme-creative #cv-contact {
-  color: #CCFBF1 !important;
-}
-.theme-creative #sections-list {
-  padding: 0 3rem 3rem 3rem !important;
-}
-.theme-creative .sec-title {
-  color: #0F766E !important;
-  border-bottom: 2px solid #0D9488 !important;
-}
-
-/* 🎨 THEME 4: Charcoal Developer (Monospace Code Style) */
-.theme-tech {
-  font-family: 'Courier New', Courier, monospace !important;
-  background-color: #FAFBFD !important;
-}
-.theme-tech #cv-name {
-  text-align: left !important;
-  color: #0F172A !important;
-  font-weight: bold !important;
-  letter-spacing: -0.05em !important;
-}
-.theme-tech #cv-contact {
-  text-align: left !important;
-  color: #64748B !important;
-}
-.theme-tech .sec-title {
-  color: #0F172A !important;
-  border-bottom: 1px dashed #647488 !important;
-  font-size: 13px !important;
-}
-.theme-tech .sec-content {
-  color: #334155 !important;
-  font-size: 13px !important;
-}
-
-/* 🎨 THEME 5: Traditional Serif (Academic) */
-.theme-academic {
-  font-family: Georgia, 'Times New Roman', serif !important;
-}
-.theme-academic #cv-header-container {
-  flex-direction: column !important;
-  align-items: center !important;
-  text-align: center !important;
-}
-.theme-academic #cv-header-text {
-  text-align: center !important;
-}
-.theme-academic #cv-name {
-  font-family: Georgia, serif !important;
-  font-size: 28px !important;
-  font-weight: 400 !important;
-  letter-spacing: 0.05em !important;
-  color: #000000 !important;
-}
-.theme-academic #cv-contact {
-  color: #2D2D2D !important;
-  letter-spacing: 0.02em !important;
-}
-.theme-academic .sec-title {
-  text-align: center !important;
-  border-bottom: 1px double #1A1A1A !important;
-  color: #1A1A1A !important;
-  font-weight: 500 !important;
-}
-.theme-academic .sec-content {
-  font-size: 13px !important;
-  line-height: 1.6 !important;
-}
-
