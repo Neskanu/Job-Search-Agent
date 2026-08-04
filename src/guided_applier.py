@@ -744,8 +744,8 @@ def run_guided_apply_session(
         memory["linkedin_li_at_cookie"] = cookie_val
         save_answers_memory(memory)
 
-    # Isolated session profile directory to avoid Windows process lock conflicts
-    user_data_dir = os.path.abspath(os.path.join("data", "browser_profiles", f"session_{session_id}"))
+    # Single persistent browser profile directory so logins/sessions are saved across runs
+    user_data_dir = os.path.abspath(os.path.join("data", "browser_profile"))
     os.makedirs(user_data_dir, exist_ok=True)
 
     try:
@@ -765,21 +765,11 @@ def run_guided_apply_session(
             page = context.pages[0] if context.pages else context.new_page()
 
             try:
-                print(f"[guided_applier] Navigating to {portal_url}")
+                print(f"[guided_applier] Navigating directly to {portal_url}")
                 safe_goto(page, portal_url)
-                time.sleep(2.5)
 
-                # If portal_url is a LinkedIn job post, click the external Apply button to follow the redirect
+                # If portal_url is a LinkedIn job post, click Apply link smoothly
                 if "linkedin.com/jobs" in page.url.lower():
-                    print("[guided_applier] LinkedIn job page detected. Attempting to click Apply button...")
-                    inject_overlay(page, "Clicking Apply link on LinkedIn page...", 1, 4)
-
-                    # Accept cookies on LinkedIn if banner present
-                    cookie_btn = page.query_selector("button:has-text('Accept'), button:has-text('Agree'), button[data-tracking-control-name*='cookie']")
-                    if cookie_btn and cookie_btn.is_visible():
-                        try: cookie_btn.click()
-                        except Exception: pass
-
                     apply_btn = page.query_selector(
                         "button.jobs-apply-button, a.jobs-apply-button, "
                         "button:has-text('Apply'), a:has-text('Apply'), "
@@ -791,14 +781,11 @@ def run_guided_apply_session(
                         try:
                             pages_before = len(context.pages)
                             apply_btn.click()
-                            time.sleep(4.0)
+                            time.sleep(2.0)
 
                             if len(context.pages) > pages_before:
                                 page = context.pages[-1]
-                                page.wait_for_load_state("domcontentloaded", timeout=25000)
-                                print(f"[guided_applier] Switched to new portal tab: {page.url}")
-                            elif "linkedin.com/jobs" not in page.url.lower():
-                                print(f"[guided_applier] Redirected to external portal: {page.url}")
+                                page.wait_for_load_state("domcontentloaded", timeout=20000)
                         except Exception as apply_err:
                             print(f"[guided_applier] Apply click note: {apply_err}")
                             time.sleep(2.0)
