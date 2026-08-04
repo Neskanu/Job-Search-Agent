@@ -157,3 +157,15 @@ def test_is_search_or_nav_field():
 
     assert is_search_or_nav_field(el_normal, "First Name") is False
 
+
+def test_is_uuid_or_random_id():
+    """Verify GUIDs and random dynamic IDs are correctly recognized and filtered out."""
+    from src.guided_applier import is_uuid_or_random_id
+
+    assert is_uuid_or_random_id("a2afee6c-96db-497d-b1a9-ddb297e5e239") is True
+    assert is_uuid_or_random_id("B1C2D3E4-F5A6-7B8C-9D0E-1F2A3B4C5D6E") is True
+    assert is_uuid_or_random_id("First Name") is False
+    assert is_uuid_or_random_id("Email Address") is False
+    assert is_uuid_or_random_id("Years of Experience") is False
+
+

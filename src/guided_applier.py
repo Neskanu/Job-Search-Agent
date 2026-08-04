@@ -414,20 +414,64 @@ def handle_workday_auth(page: Page, cv_data: Dict[str, Any], memory: Dict[str, s
 # Generic Field Detection & Heuristics Engine
 # ---------------------------------------------------------------------------
 
-def extract_field_label(group) -> str:
-    """Extract human-readable label from element or parent container."""
-    # Check explicit label or legend
-    lbl = group.query_selector("label, legend, [class*='label'], [data-automation-id*='label']")
-    if lbl:
-        txt = lbl.inner_text().strip()
-        if txt:
-            return txt
+def is_uuid_or_random_id(val: str) -> bool:
+    """Check if a string is a UUID/GUID or random generated DOM hash id."""
+    if not val:
+        return True
+    val_clean = val.strip().lower()
+    # UUID format: e.g. a2afee6c-96db-497d-b1a9-ddb297e5e239
+    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', val_clean):
+        return True
+    # Hex string or numeric id like "input_184920" or "form-control-9482"
+    if re.match(r'^(input|field|el|id|_)?[-_]?[0-9a-f]{8,32}$', val_clean):
+        return True
+    return False
 
-    # Check attributes
+
+def extract_field_label(group) -> str:
+    """
+    Extract human-readable label from element or nearby DOM container text,
+    ignoring dynamic framework UUIDs/GUIDs.
+    """
+    # 1. Nearby DOM container text, aria-labelledby, or associated <label> via JS evaluation
+    try:
+        nearby_text = group.evaluate("""el => {
+            if (el.labels && el.labels.length > 0) {
+                const txt = el.labels[0].innerText ? el.labels[0].innerText.trim() : '';
+                if (txt) return txt;
+            }
+            const lby = el.getAttribute('aria-labelledby');
+            if (lby) {
+                const lbyEl = document.getElementById(lby);
+                if (lbyEl && lbyEl.innerText.trim()) return lbyEl.innerText.trim();
+            }
+            let container = el.closest('.form-group, .field, [class*="group"], [class*="field"], [data-automation-id], div, section');
+            if (container) {
+                const lblNode = container.querySelector('label, legend, span[class*="label"], div[class*="label"], [data-automation-id*="label"]');
+                if (lblNode && lblNode.innerText.trim()) return lblNode.innerText.trim();
+            }
+            let prev = el.previousElementSibling;
+            while (prev) {
+                const txt = prev.innerText ? prev.innerText.trim() : '';
+                if (txt && txt.length > 1 && txt.length < 100) return txt;
+                prev = prev.previousElementSibling;
+            }
+            return '';
+        }""")
+        if nearby_text and not is_uuid_or_random_id(nearby_text):
+            cleaned = re.sub(r'[\*\:]+$', '', nearby_text.strip()).strip()
+            if cleaned and not is_uuid_or_random_id(cleaned):
+                return cleaned
+    except Exception:
+        pass
+
+    # 2. Check attributes, filtering out UUIDs
     for attr in ["aria-label", "placeholder", "title", "name", "id"]:
         val = group.get_attribute(attr) if hasattr(group, "get_attribute") else None
-        if val and len(val) > 1 and not val.startswith("http"):
-            return val.strip()
+        if val and len(val) > 1 and not val.startswith("http") and not is_uuid_or_random_id(val):
+            cleaned = re.sub(r'[\*\:]+$', '', val.strip()).strip()
+            if cleaned and not is_uuid_or_random_id(cleaned):
+                return cleaned
 
     return ""
 
