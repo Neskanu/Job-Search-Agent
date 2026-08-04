@@ -1557,6 +1557,7 @@ function loadAppStateFromCache() {
 document.addEventListener("DOMContentLoaded", () => {
   loadAppStateFromCache();
   loadSavedCVList();
+  syncCookieFromMemory(); // Pre-fill li_at from server memory if localStorage is empty
   
   const savedMode = localStorage.getItem("cv_view_mode") || "edit";
   setViewMode(savedMode);
@@ -1575,6 +1576,14 @@ document.addEventListener("DOMContentLoaded", () => {
       el.addEventListener("change", saveAppStateToCache);
     }
   });
+
+  // Persist li-at-cookie to server memory when user changes it, so
+  // guided apply sessions can find it even if the field is cleared
+  const liAtInput = document.getElementById("li-at-cookie");
+  if (liAtInput) {
+    liAtInput.addEventListener("change", persistCookieToMemory);
+    liAtInput.addEventListener("blur", persistCookieToMemory);
+  }
 
   // Auto-sync manual job form inputs to cvState.selectedJob
   const manualInputs = ["job-title", "job-company", "job-desc", "direct-job-url"];
@@ -2107,4 +2116,49 @@ async function submitGuidedAnswer() {
 function closeGuidedApplyModal() {
   if (_guidedPollInterval) clearInterval(_guidedPollInterval);
   document.getElementById('guided-apply-modal').classList.add('hidden');
+}
+
+
+// ---------------------------------------------------------------------------
+// Cookie persistence helpers (linkedin li_at session cookie)
+// ---------------------------------------------------------------------------
+
+/**
+ * On startup: if li-at-cookie input is empty, fetch answers_memory from
+ * server and pre-fill from the stored linkedin_li_at_cookie key.
+ */
+async function syncCookieFromMemory() {
+  const input = document.getElementById("li-at-cookie");
+  if (!input || input.value.trim()) return; // already has a value
+  try {
+    const resp = await fetch("/api/answers-memory");
+    if (!resp.ok) return;
+    const mem = await resp.json();
+    const saved = (mem["linkedin_li_at_cookie"] || "").trim();
+    if (saved) {
+      input.value = saved;
+      saveAppStateToCache();
+    }
+  } catch { /* silently ignore */ }
+}
+
+/**
+ * When user pastes/types a new li_at cookie value, save it to server-side
+ * answers_memory.json so browser automation sessions always find it.
+ */
+async function persistCookieToMemory() {
+  const val = (document.getElementById("li-at-cookie")?.value || "").trim();
+  if (!val) return;
+  try {
+    const resp = await fetch("/api/answers-memory");
+    if (!resp.ok) return;
+    const mem = await resp.json();
+    if (mem["linkedin_li_at_cookie"] === val) return; // no change
+    mem["linkedin_li_at_cookie"] = val;
+    await fetch("/api/answers-memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memory: mem })
+    });
+  } catch { /* silently ignore */ }
 }

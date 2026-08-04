@@ -74,7 +74,8 @@ def load_answers_memory(path: str = MEMORY_FILE_PATH) -> Dict[str, str]:
             "do you require visa sponsorship": "No",
             "salary expectations": "Negotiable",
             "city": "",
-            "country": ""
+            "country": "",
+            "linkedin_li_at_cookie": ""
         }
         try:
             with open(path, "w", encoding="utf-8") as f:
@@ -518,19 +519,37 @@ def run_guided_apply_session(
 
     save_session(company, portal_url, 1, 4, filled_fields, "running", session_id=session_id)
 
+    # Fallback li_at cookie from memory if not provided in request
+    cookie_val = (li_at or "").strip()
+    if not cookie_val or cookie_val.lower() in ("none", "null", "undefined"):
+        cookie_val = memory.get("linkedin_li_at_cookie", "").strip()
+    elif cookie_val:
+        memory["linkedin_li_at_cookie"] = cookie_val
+        save_answers_memory(memory)
+
+    user_data_dir = os.path.abspath(os.path.join("data", "browser_profile"))
+    os.makedirs(user_data_dir, exist_ok=True)
+
     try:
         with sync_playwright() as pw:
-            browser: Browser = pw.chromium.launch(headless=False, args=["--start-maximized"])
-            context = browser.new_context(viewport={"width": 1280, "height": 900})
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
+                headless=False,
+                args=["--start-maximized"],
+                viewport={"width": 1280, "height": 900}
+            )
 
             # Inject li_at cookie if available
-            if li_at and li_at.strip().lower() not in ("", "none", "null", "undefined"):
-                context.add_cookies([{
-                    "name": "li_at", "value": li_at.strip(), "domain": ".linkedin.com",
-                    "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
-                }])
+            if cookie_val and cookie_val.lower() not in ("none", "null", "undefined"):
+                try:
+                    context.add_cookies([{
+                        "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
+                        "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
+                    }])
+                except Exception as c_err:
+                    print(f"[guided_applier] Warning adding cookie: {c_err}")
 
-            page = context.new_page()
+            page = context.pages[0] if context.pages else context.new_page()
 
             try:
                 print(f"[guided_applier] Navigating to {portal_url}")
@@ -584,7 +603,7 @@ def run_guided_apply_session(
                             if st in ("running", "cancelled", "completed"):
                                 break
                             if st == "stopped":
-                                browser.close()
+                                context.close()
                                 return
 
                     # Handle File Upload on this step if present
@@ -696,7 +715,7 @@ def run_guided_apply_session(
                                     break
 
                                 if st in ("cancelled", "stopped"):
-                                    browser.close()
+                                    context.close()
                                     return
 
                     # Take step completion screenshot
@@ -729,7 +748,7 @@ def run_guided_apply_session(
                 time.sleep(5.0)
 
             finally:
-                browser.close()
+                context.close()
 
     except Exception as err:
         import traceback
