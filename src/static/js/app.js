@@ -2049,7 +2049,18 @@ async function pollGuidedApplyStatus() {
   }
 }
 
+let _lastRenderedFieldLabel = null;
+let _activeDraftUserAnswer = "";
+
 function renderGuidedPausedField(pausedField) {
+  // If the exact same field is being polled, DO NOT touch the DOM or screenshot,
+  // so the user's active typing and option selections are never wiped out!
+  if (_lastRenderedFieldLabel === pausedField.label) {
+    return;
+  }
+  _lastRenderedFieldLabel = pausedField.label;
+  _activeDraftUserAnswer = "";
+
   const container = document.getElementById('guided-paused-container');
   const img = document.getElementById('guided-field-screenshot');
   const labelEl = document.getElementById('guided-field-label');
@@ -2058,13 +2069,6 @@ function renderGuidedPausedField(pausedField) {
   container.classList.remove('hidden');
   img.src = pausedField.screenshot_b64 || '';
   labelEl.textContent = pausedField.label;
-
-  // ONLY re-render the input elements if a NEW field has paused,
-  // so we don't wipe out the user's active typing/selection on every 2-second poll tick!
-  if (_lastRenderedFieldLabel === pausedField.label) {
-    return;
-  }
-  _lastRenderedFieldLabel = pausedField.label;
 
   if (pausedField.field_type === 'captcha') {
     inputWrapper.innerHTML = `
@@ -2077,13 +2081,13 @@ function renderGuidedPausedField(pausedField) {
 
   if (pausedField.options && pausedField.options.length > 0) {
     inputWrapper.innerHTML = `
-      <select id="guided-user-input" class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
+      <select id="guided-user-input" onchange="_activeDraftUserAnswer=this.value" class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
         ${pausedField.options.map(opt => `<option value="${opt.replace(/"/g, '&quot;')}">${opt}</option>`).join('')}
       </select>
     `;
   } else {
     inputWrapper.innerHTML = `
-      <input type="text" id="guided-user-input" placeholder="Type your answer..." class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
+      <input type="text" id="guided-user-input" oninput="_activeDraftUserAnswer=this.value" placeholder="Type your answer..." class="w-full bg-[#0F172A] border border-[#334155] rounded-lg text-slate-200 text-xs p-2.5 focus:outline-none focus:border-rose-500">
     `;
   }
 }
@@ -2095,7 +2099,7 @@ async function submitGuidedAnswer() {
   const inputEl = document.getElementById('guided-user-input');
   const rememberCheckbox = document.getElementById('guided-remember-checkbox');
 
-  const answer = inputEl ? inputEl.value : 'Done';
+  const answer = _activeDraftUserAnswer || (inputEl ? inputEl.value : 'Done');
   const label = labelEl ? labelEl.textContent : '';
   const remember = rememberCheckbox ? rememberCheckbox.checked : true;
 
@@ -2114,6 +2118,7 @@ async function submitGuidedAnswer() {
     if (!resp.ok) throw new Error('Failed to submit answer');
 
     _lastRenderedFieldLabel = null;
+    _activeDraftUserAnswer = "";
     document.getElementById('guided-paused-container').classList.add('hidden');
     showToast('Answer submitted! Resuming session...');
 

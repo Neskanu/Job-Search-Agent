@@ -478,16 +478,80 @@ def derive_from_cv_heuristics(label: str, cv_data: Dict[str, Any]) -> Optional[s
     return None
 
 
+def try_apply_with_linkedin(page: Page, context) -> bool:
+    """
+    Search for and click 'Apply with LinkedIn' or 'Autofill with LinkedIn' buttons
+    on company portals to automatically pre-fill candidate data using logged in LinkedIn session.
+    """
+    selectors = [
+        "button:has-text('Apply with LinkedIn')",
+        "a:has-text('Apply with LinkedIn')",
+        "button:has-text('Autofill with LinkedIn')",
+        "a:has-text('Autofill with LinkedIn')",
+        "button:has-text('Apply using LinkedIn')",
+        "a:has-text('Apply using LinkedIn')",
+        "[data-automation-id='applyWithLinkedIn']",
+        "button[class*='linkedin']",
+        "a[class*='linkedin']"
+    ]
+
+    for sel in selectors:
+        try:
+            btn = page.query_selector(sel)
+            if btn and btn.is_visible():
+                print(f"[guided_applier] Detected 'Apply with LinkedIn' button ({sel}). Executing click...")
+                inject_overlay(page, "Clicking 'Apply with LinkedIn' to auto-fill details...", 1, 4)
+                pages_before = len(context.pages)
+                btn.click()
+                time.sleep(3.0)
+
+                if len(context.pages) > pages_before:
+                    popup = context.pages[-1]
+                    print(f"[guided_applier] LinkedIn OAuth popup detected: {popup.url}")
+                    popup.wait_for_load_state("domcontentloaded", timeout=15000)
+                    time.sleep(2.0)
+
+                    allow_btn = popup.query_selector("button:has-text('Allow'), input[value='Allow'], button:has-text('Continue'), button:has-text('Sign In')")
+                    if allow_btn and allow_btn.is_visible():
+                        allow_btn.click()
+                        time.sleep(3.0)
+
+                return True
+        except Exception as e:
+            print(f"[guided_applier] 'Apply with LinkedIn' note: {e}")
+
+    return False
+
+
 def is_search_or_nav_field(el, label: str) -> bool:
-    """Return True if element is a site search box, navigation bar input, filter, or language selector."""
+    """Return True if element is a site search box, navigation bar input, filter, footer, or language selector."""
     norm = normalize_label(label)
-    if norm in ("search", "search jobs", "search careers", "filter", "filter jobs", "ieskoti", "paieska", "query", "keywords", "r4", "language", "kalba"):
+    if not norm or len(norm) < 2 or norm in ("search", "search jobs", "search careers", "filter", "filter jobs", "ieskoti", "paieska", "query", "keywords", "r4", "language", "kalba"):
         return True
+
+    # Check bounding box size (skip tiny/hidden icons)
+    try:
+        box = el.bounding_box()
+        if box and (box.get("width", 0) < 15 or box.get("height", 0) < 15):
+            return True
+    except Exception:
+        pass
 
     try:
         el_type = (el.get_attribute("type") or "").lower()
         if el_type in ("search", "button", "reset"):
             return True
+
+        # Check if element is inside header, footer, or nav block
+        try:
+            is_in_nav = el.evaluate("""el => {
+                const container = el.closest('header, footer, nav, [role="contentinfo"], [role="navigation"], .footer, .header, #footer, #header');
+                return container !== null;
+            }""")
+            if isinstance(is_in_nav, bool) and is_in_nav:
+                return True
+        except Exception:
+            pass
 
         for attr in ["name", "id", "placeholder", "aria-label", "class"]:
             val = (el.get_attribute(attr) or "").lower()
@@ -639,7 +703,10 @@ def run_guided_apply_session(
                 ats_type = detect_ats_platform(page.url)
                 inject_overlay(page, f"Portal loaded ({ats_type.upper()}). Scanning fields...", 1, 4)
 
-                # Check Workday Auth
+                # 1. Always attempt 'Apply with LinkedIn' / 'Autofill with LinkedIn' on external portal
+                try_apply_with_linkedin(page, context)
+
+                # 2. Check Workday Auth
                 if ats_type == "workday":
                     handle_workday_auth(page, cv_data, memory)
                     inject_overlay(page, "Workday account check completed. Scanning form...", 1, 4)

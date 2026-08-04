@@ -8,6 +8,11 @@ data/original_cv/*
 data/tailored_cvs/*
 !data/tailored_cvs/.gitkeep
 
+# Ignore persistent browser profiles and portal sessions
+data/browser_profile/
+data/portal_sessions/*
+!data/portal_sessions/.gitkeep
+
 # Ignore local configuration files
 config/local_settings.yaml
 
