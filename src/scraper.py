@@ -350,64 +350,84 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(1000)
                 
-            if li_at_cookie:
-                card_selectors = [
-                    ".scaffold-layout__list-item",
-                    ".job-card-container",
-                    ".jobs-search-results-list__list-item"
-                ]
-                cards = []
-                for sel in card_selectors:
-                    found = page.locator(sel)
-                    if found.count() > 0:
-                        cards = found
-                        break
-                        
-                count = min(cards.count() if cards else 0, limit)
+            card_selectors = [
+                ".scaffold-layout__list-item",
+                ".job-card-container",
+                ".jobs-search-results-list__list-item",
+                ".base-card",
+                ".base-search-card",
+                ".jobs-search__results-list li",
+                "li.job-search-card"
+            ]
+            cards = None
+            for sel in card_selectors:
+                found = page.locator(sel)
+                if found.count() > 0:
+                    cards = found
+                    break
+
+            if cards:
+                count = min(cards.count(), limit)
                 for i in range(count):
                     try:
                         card = cards.nth(i)
-                        
-                        # Get title
-                        title_el = card.locator(".job-card-list__title").first
-                        if not title_el.is_visible():
-                            title_el = card.locator("a[class*='job-card']").first
-                            
-                        title = title_el.inner_text().strip() if title_el.is_visible() else "Unknown Title"
-                        
-                        # Get URL link
+
+                        # Extract Title (check all possible title selectors)
+                        title = "Unknown Title"
+                        for t_sel in [".job-card-list__title", ".base-search-card__title", "a[class*='job-card']", "h3", "h4"]:
+                            t_el = card.locator(t_sel).first
+                            if t_el.is_visible():
+                                txt = t_el.inner_text().strip()
+                                if txt:
+                                    title = txt
+                                    break
+
+                        # Extract Company (check all possible company selectors)
+                        company = "Unknown Company"
+                        for c_sel in [".job-card-container__primary-description", ".job-card-container__company-name", ".base-search-card__subtitle", "a[href*='/company/']"]:
+                            c_el = card.locator(c_sel).first
+                            if c_el.is_visible():
+                                txt = c_el.inner_text().strip()
+                                if txt:
+                                    company = txt
+                                    break
+
+                        # Extract Location (check all possible location selectors)
+                        loc = "Unknown Location"
+                        for l_sel in [".job-card-container__metadata-item", ".job-search-card__location"]:
+                            l_el = card.locator(l_sel).first
+                            if l_el.is_visible():
+                                txt = l_el.inner_text().strip()
+                                if txt:
+                                    loc = txt
+                                    break
+
+                        # Extract Link URL
                         href = ""
-                        link_el = card.locator("a").first
-                        for j in range(card.locator("a").count()):
-                            temp_el = card.locator("a").nth(j)
-                            href_val = temp_el.get_attribute("href")
-                            if href_val and "/jobs/view/" in href_val:
-                                href = href_val
+                        for a_idx in range(card.locator("a").count()):
+                            a_el = card.locator("a").nth(a_idx)
+                            h_val = a_el.get_attribute("href") or ""
+                            if "/jobs/view/" in h_val or "currentJobId" in h_val:
+                                href = h_val
                                 break
-                        
+                        if not href:
+                            link_el = card.locator("a.base-card__full-link, a").first
+                            if link_el.is_visible():
+                                href = link_el.get_attribute("href") or ""
+
                         if href:
                             href = normalize_linkedin_url(href)
-                            
-                        # Get company
-                        company_el = card.locator(".job-card-container__primary-description").first
-                        if not company_el.is_visible():
-                            company_el = card.locator(".job-card-container__company-name").first
-                        company = company_el.inner_text().strip() if company_el.is_visible() else "Unknown Company"
-                        
-                        # Get location
-                        loc_el = card.locator(".job-card-container__metadata-item").first
-                        loc = loc_el.inner_text().strip() if loc_el.is_visible() else "Unknown Location"
-                        
-                        # Check Easy Apply status on card
+
+                        # Check Easy Apply
                         is_easy_apply = False
                         try:
                             card_text = card.inner_text().lower()
-                            if "easy apply" in card_text or card.locator(".job-card-container__apply-method, button:has-text('Easy Apply'), span:has-text('Easy Apply')").count() > 0:
+                            if "easy apply" in card_text or card.locator(".job-card-container__apply-method, .job-search-card__easy-apply-label, .easy-apply-label, span:has-text('Easy Apply'), button:has-text('Easy Apply')").count() > 0:
                                 is_easy_apply = True
                         except Exception:
                             pass
 
-                        if href:
+                        if href and title != "Unknown Title":
                             jobs.append({
                                 "title": title,
                                 "company": company,
@@ -417,57 +437,6 @@ def _search_linkedin_jobs_inner(keywords: str, location: str, limit: int = 10, l
                             })
                     except Exception:
                         continue
-            else:
-                card_selectors = [
-                    ".base-card",
-                    ".base-search-card",
-                    ".jobs-search__results-list li"
-                ]
-                cards = []
-                for sel in card_selectors:
-                    found = page.locator(sel)
-                    if found.count() > 0:
-                        cards = found
-                        break
-                        
-                count = min(cards.count() if cards else 0, limit)
-                for i in range(count):
-                    try:
-                        card = cards.nth(i)
-                        
-                        title_el = card.locator(".base-search-card__title").first
-                        title = title_el.inner_text().strip() if title_el.is_visible() else "Unknown Title"
-                        
-                        company_el = card.locator(".base-search-card__subtitle").first
-                        company = company_el.inner_text().strip() if company_el.is_visible() else "Unknown Company"
-                        
-                        loc_el = card.locator(".job-search-card__location").first
-                        loc = loc_el.inner_text().strip() if loc_el.is_visible() else "Unknown Location"
-                        
-                        link_el = card.locator("a.base-card__full-link").first
-                        if not link_el.is_visible():
-                            link_el = card.locator("a").first
-                        href = link_el.get_attribute("href") if link_el.is_visible() else ""
-                        
-                        # Check Easy Apply status on guest card
-                        is_easy_apply = False
-                        try:
-                            card_text = card.inner_text().lower()
-                            if "easy apply" in card_text or card.locator(".job-search-card__easy-apply-label, .easy-apply-label, span:has-text('Easy Apply')").count() > 0:
-                                is_easy_apply = True
-                        except Exception:
-                            pass
-
-                        if href:
-                            href = normalize_linkedin_url(href)
-                            
-                            jobs.append({
-                                "title": title,
-                                "company": company,
-                                "location": loc,
-                                "url": href,
-                                "easy_apply": is_easy_apply
-                            })
                     except Exception:
                         continue
                         
