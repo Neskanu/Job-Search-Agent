@@ -601,6 +601,33 @@ def fill_element_robustly(el, value: str) -> None:
             pass
 
 
+def create_browser_context(pw, user_data_dir: str):
+    """
+    Safely launch persistent Chromium context with no_viewport=True for --start-maximized support.
+    Cleans stale lock files and falls back to standard chromium launch if persistent launch fails.
+    """
+    # 1. Clean up stale lock files in user_data_dir if present
+    for root, _, files in os.walk(user_data_dir):
+        for f in files:
+            if f.lower() in ("lockfile", "lock", "singletonlock", "singletoncookie"):
+                try:
+                    os.remove(os.path.join(root, f))
+                except Exception:
+                    pass
+
+    try:
+        return pw.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            headless=False,
+            args=["--start-maximized"],
+            no_viewport=True
+        )
+    except Exception as err:
+        print(f"[guided_applier] Persistent context launch note ({err}), falling back to standard launch...")
+        browser = pw.chromium.launch(headless=False, args=["--start-maximized"])
+        return browser.new_context(viewport={"width": 1280, "height": 900})
+
+
 # ---------------------------------------------------------------------------
 # Main Guided Application Orchestrator
 # ---------------------------------------------------------------------------
@@ -655,12 +682,7 @@ def run_guided_apply_session(
 
     try:
         with sync_playwright() as pw:
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                headless=False,
-                args=["--start-maximized"],
-                viewport={"width": 1280, "height": 900}
-            )
+            context = create_browser_context(pw, user_data_dir)
 
             # Inject li_at cookie if available
             if cookie_val and cookie_val.lower() not in ("none", "null", "undefined"):
