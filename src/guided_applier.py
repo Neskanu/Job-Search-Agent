@@ -721,20 +721,27 @@ def run_guided_apply_session(
         memory["linkedin_li_at_cookie"] = cookie_val
         save_answers_memory(memory)
 
-    user_data_dir = os.path.abspath(os.path.join("data", "browser_profile"))
+    # Isolated session profile directory to avoid Windows process lock conflicts
+    user_data_dir = os.path.abspath(os.path.join("data", "browser_profiles", f"session_{session_id}"))
     os.makedirs(user_data_dir, exist_ok=True)
 
     try:
         with sync_playwright() as pw:
             context = create_browser_context(pw, user_data_dir)
 
-            # Inject li_at cookie if available
+            # Inject li_at cookie if available across all linkedin subdomains
             if cookie_val and cookie_val.lower() not in ("none", "null", "undefined"):
                 try:
-                    context.add_cookies([{
-                        "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
-                        "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
-                    }])
+                    context.add_cookies([
+                        {
+                            "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
+                            "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
+                        },
+                        {
+                            "name": "li_at", "value": cookie_val, "domain": "www.linkedin.com",
+                            "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
+                        }
+                    ])
                 except Exception as c_err:
                     print(f"[guided_applier] Warning adding cookie: {c_err}")
 
@@ -742,8 +749,24 @@ def run_guided_apply_session(
 
             try:
                 print(f"[guided_applier] Navigating to {portal_url}")
-                page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
-                time.sleep(2.5)
+
+                # Establish LinkedIn session domain first if landing on LinkedIn job URL
+                if "linkedin.com" in portal_url.lower() and cookie_val:
+                    try:
+                        page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=15000)
+                        time.sleep(1.5)
+                    except Exception as base_err:
+                        print(f"[guided_applier] Base domain pre-navigation note: {base_err}")
+
+                try:
+                    page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
+                    time.sleep(2.5)
+                except Exception as goto_err:
+                    print(f"[guided_applier] Direct goto error ({goto_err}), retrying via base domain...")
+                    page.goto("https://www.linkedin.com", wait_until="domcontentloaded", timeout=15000)
+                    time.sleep(2.0)
+                    page.goto(portal_url, wait_until="domcontentloaded", timeout=35000)
+                    time.sleep(2.5)
 
                 # If portal_url is a LinkedIn job post, click the external Apply button to follow the redirect
                 if "linkedin.com/jobs" in page.url.lower():

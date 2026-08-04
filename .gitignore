@@ -10,6 +10,7 @@ data/tailored_cvs/*
 
 # Ignore persistent browser profiles and portal sessions
 data/browser_profile/
+data/browser_profiles/
 data/portal_sessions/*
 !data/portal_sessions/.gitkeep
 
