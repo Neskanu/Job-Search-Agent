@@ -647,10 +647,9 @@ def fill_element_robustly(el, value: str) -> None:
 
 def create_browser_context(pw, user_data_dir: str):
     """
-    Safely launch persistent Chromium context with no_viewport=True for --start-maximized support.
+    Safely launch persistent Chromium context with stealth parameters to prevent blank page blocking on LinkedIn.
     Cleans stale lock files and falls back to standard chromium launch if persistent launch fails.
     """
-    # 1. Clean up stale lock files in user_data_dir if present
     for root, _, files in os.walk(user_data_dir):
         for f in files:
             if f.lower() in ("lockfile", "lock", "singletonlock", "singletoncookie"):
@@ -659,17 +658,37 @@ def create_browser_context(pw, user_data_dir: str):
                 except Exception:
                     pass
 
+    stealth_args = [
+        "--start-maximized",
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-setuid-sandbox"
+    ]
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
     try:
-        return pw.chromium.launch_persistent_context(
+        ctx = pw.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=False,
-            args=["--start-maximized"],
-            no_viewport=True
+            args=stealth_args,
+            no_viewport=True,
+            user_agent=ua
         )
     except Exception as err:
         print(f"[guided_applier] Persistent context launch note ({err}), falling back to standard launch...")
-        browser = pw.chromium.launch(headless=False, args=["--start-maximized"])
-        return browser.new_context(viewport={"width": 1280, "height": 900})
+        browser = pw.chromium.launch(headless=False, args=stealth_args)
+        ctx = browser.new_context(viewport={"width": 1280, "height": 900}, user_agent=ua)
+
+    # Inject stealth script to mask navigator.webdriver bot detection
+    try:
+        ctx.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.navigator.chrome = { runtime: {} };
+        """)
+    except Exception:
+        pass
+
+    return ctx
 
 
 def safe_goto(page: Page, url: str, timeout: int = 35000) -> bool:
@@ -784,7 +803,18 @@ def run_guided_apply_session(
                         page.goto(portal_url, wait_until="load", timeout=30000)
                     except Exception as force_err:
                         print(f"[guided_applier] Force goto note: {force_err}")
+
                 time.sleep(2.5)
+
+                # Check if page rendered blank white and reload if needed
+                try:
+                    body_text = page.locator("body").inner_text().strip()
+                    if not body_text:
+                        print("[guided_applier] Blank page detected. Reloading page...")
+                        page.reload(wait_until="domcontentloaded", timeout=20000)
+                        time.sleep(2.0)
+                except Exception:
+                    pass
 
                 # If portal_url is a LinkedIn job post, click Apply link smoothly
                 if "linkedin.com/jobs" in page.url.lower():
