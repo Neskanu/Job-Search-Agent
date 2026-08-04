@@ -747,24 +747,74 @@ def run_guided_apply_session(
 
                 # If portal_url is a LinkedIn job post, click the external Apply button to follow the redirect
                 if "linkedin.com/jobs" in page.url.lower():
+                    print("[guided_applier] LinkedIn job page detected. Attempting to click Apply button...")
+                    inject_overlay(page, "Clicking Apply link on LinkedIn page...", 1, 4)
+
+                    # Accept cookies on LinkedIn if banner present
+                    cookie_btn = page.query_selector("button:has-text('Accept'), button:has-text('Agree'), button[data-tracking-control-name*='cookie']")
+                    if cookie_btn and cookie_btn.is_visible():
+                        try: cookie_btn.click()
+                        except Exception: pass
+
                     apply_btn = page.query_selector(
-                        "a.jobs-apply-button, a[href*='apply'], button.jobs-apply-button, "
-                        "a:has-text('Apply'), button:has-text('Apply')"
+                        "button.jobs-apply-button, a.jobs-apply-button, "
+                        "button:has-text('Apply'), a:has-text('Apply'), "
+                        "button:has-text('Easy Apply'), a:has-text('Easy Apply'), "
+                        "a[href*='apply'], [data-automation-id='apply']"
                     )
-                    if apply_btn:
-                        print("[guided_applier] Clicking external Apply link on LinkedIn page...")
-                        inject_overlay(page, "Clicking external Apply link to follow redirect...", 1, 4)
+
+                    if apply_btn and apply_btn.is_visible():
                         try:
-                            with context.expect_page(timeout=10000) as new_page_info:
-                                apply_btn.click()
-                            page = new_page_info.value
-                            page.wait_for_load_state("domcontentloaded", timeout=25000)
-                            time.sleep(3.0)
-                        except Exception as nav_err:
-                            print(f"[guided_applier] Apply click redirect note: {nav_err}")
-                            time.sleep(3.0)
+                            pages_before = len(context.pages)
+                            apply_btn.click()
+                            time.sleep(4.0)
+
+                            if len(context.pages) > pages_before:
+                                page = context.pages[-1]
+                                page.wait_for_load_state("domcontentloaded", timeout=25000)
+                                print(f"[guided_applier] Switched to new portal tab: {page.url}")
+                            elif "linkedin.com/jobs" not in page.url.lower():
+                                print(f"[guided_applier] Redirected to external portal: {page.url}")
+                        except Exception as apply_err:
+                            print(f"[guided_applier] Apply click note: {apply_err}")
+                            time.sleep(2.0)
                             if len(context.pages) > 1:
                                 page = context.pages[-1]
+
+                    # If still on LinkedIn page and no external tab opened, pause for human handholding
+                    if "linkedin.com/jobs" in page.url.lower():
+                        screenshot_path, b64 = highlight_element_and_screenshot(page, apply_btn or page.query_selector("body"), audit_dir, "linkedin_handshake")
+                        screenshots.append(screenshot_path)
+
+                        paused_info = {
+                            "label": "Click 'Apply' on LinkedIn page in Chromium",
+                            "field_type": "text",
+                            "screenshot_b64": b64,
+                            "options": [],
+                            "selector": "linkedin_apply"
+                        }
+
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "paused"
+                            ACTIVE_SESSIONS[session_id]["paused_field"] = paused_info
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Paused: Click Apply on LinkedIn window to open application portal."
+
+                        save_session(company, portal_url, 1, 4, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
+                        inject_overlay(page, "👉 Please click the Apply button in Chromium to open external portal, then click Resume →", 1, 4)
+
+                        while True:
+                            time.sleep(1.0)
+                            with ACTIVE_SESSIONS_LOCK:
+                                st = ACTIVE_SESSIONS[session_id]["status"]
+                            if st in ("running", "cancelled", "completed"):
+                                break
+                            if st == "stopped":
+                                context.close()
+                                return
+
+                        # If user opened a new tab or redirected, switch to the latest page
+                        if len(context.pages) > 1:
+                            page = context.pages[-1]
 
                 ats_type = detect_ats_platform(page.url)
                 inject_overlay(page, f"Portal loaded ({ats_type.upper()}). Scanning fields...", 1, 4)
