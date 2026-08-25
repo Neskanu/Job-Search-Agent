@@ -87,6 +87,8 @@ class GenerateDocsRequest(BaseModel):
     line_style: Optional[str] = Field(default="short", description="Accent line style: short, full, none")
     bullet_symbol: Optional[str] = Field(default="│", description="Bullet symbol: │, ▸, •, ◆")
     layout_mode: Optional[str] = Field(default="2col", description="Layout mode: 2col, 1col")
+    pdf_engine: Optional[str] = Field(default="html", description="PDF rendering engine: html, executive, classic")
+    fit_one_page: Optional[bool] = Field(default=False, description="Fit CV content on exactly 1 page")
 
 # ==========================================
 # 🛠️ API ENDPOINTS
@@ -122,7 +124,7 @@ async def upload_cv(file: UploadFile = File(...)):
         # Compile a PDF preview for the uploaded document
         base_name = os.path.splitext(file.filename)[0]
         pdf_preview_path = os.path.join("data/original_cv", f"preview_{base_name}.pdf").replace("\\", "/")
-        await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_preview_path)
+        await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_preview_path, "creative", None, "short", "│", "2col", "html")
         
         return {
             "success": True,
@@ -183,7 +185,7 @@ async def load_cv(request: LoadCVRequest):
         pdf_path = request.path
         if not request.path.lower().endswith(".pdf"):
             pdf_path = os.path.splitext(request.path)[0] + "_preview.pdf"
-            await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_path)
+            await asyncio.to_thread(save_cv_as_pdf, cv_data, pdf_path, "creative", None, "short", "│", "2col", "html")
             
         return {
             "success": True,
@@ -287,7 +289,18 @@ async def generate_docs(request: GenerateDocsRequest):
         
         # Save files on background threads to prevent event loop lag, passing selected theme layout & customizations
         await asyncio.to_thread(save_cv_as_docx, request.cv_data, docx_path, request.theme, request.custom_color, request.bullet_symbol)
-        await asyncio.to_thread(save_cv_as_pdf, request.cv_data, pdf_path, request.theme, request.custom_color, request.line_style, request.bullet_symbol, request.layout_mode)
+        await asyncio.to_thread(
+            save_cv_as_pdf,
+            request.cv_data,
+            pdf_path,
+            request.theme,
+            request.custom_color,
+            request.line_style,
+            request.bullet_symbol,
+            request.layout_mode,
+            request.pdf_engine or "html",
+            request.fit_one_page or False
+        )
         
         return {
             "success": True,
@@ -479,8 +492,9 @@ async def api_list_applications():
                 "submitted_at": record.get("submitted_at", ""),
                 "audit_dir": entry.path
             })
-        except Exception:
-            pass  # Skip malformed records silently
+        except Exception as e:
+            print(f"[main] Failed to load application audit record from {result_path}: {e}")
+            pass  # Skip malformed records
 
     return {"applications": applications}
 
@@ -571,6 +585,17 @@ async def api_answer_field(req: AnswerFieldRequest):
         ACTIVE_SESSIONS[req.session_id]["last_action"] = f"Resuming with answer for '{req.field_label}'"
 
     return {"success": True, "message": "Answer received, session resuming."}
+
+
+@app.post("/api/close-guided-session", summary="Close active guided apply browser session")
+async def api_close_guided_session(session_id: str = Query(...)):
+    """Stop active guided apply session and close Playwright browser window."""
+    with ACTIVE_SESSIONS_LOCK:
+        if session_id in ACTIVE_SESSIONS:
+            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+            ACTIVE_SESSIONS[session_id]["last_action"] = "Session stopped by user."
+            return {"success": True, "message": "Session closed."}
+    return {"success": True, "message": "Session already closed."}
 
 
 # ==========================================

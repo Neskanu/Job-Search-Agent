@@ -39,7 +39,8 @@ def register_unicode_pdf_fonts():
                 if os.path.exists(ital_path):
                     pdfmetrics.registerFont(TTFont(i_name, ital_path))
                 return family, b_name, i_name
-            except Exception:
+            except Exception as e:
+                print(f"[parser] Font registration failed for candidate {family}: {e}")
                 pass
                 
     return 'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'
@@ -285,7 +286,8 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
             b = int(custom_color[5:7], 16)
             heading_color = docx.shared.RGBColor(r, g, b)
             name_color = docx.shared.RGBColor(r, g, b)
-        except Exception:
+        except Exception as e:
+            print(f"[parser] Invalid custom hex color '{custom_color}' for DOCX styling: {e}")
             pass
     
     # Theme overrides
@@ -553,15 +555,579 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
                 
     doc.save(output_path)
 
-def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "minimalist", custom_color: Optional[str] = None, line_style: str = "short", bullet_symbol: str = "│", layout_mode: str = "2col") -> None:
+def generate_html_for_cv(
+    cv_data: Dict[str, Any],
+    theme: str = "creative",
+    custom_color: Optional[str] = None,
+    line_style: str = "short",
+    bullet_symbol: str = "│",
+    layout_mode: str = "2col",
+    fit_one_page: bool = False
+) -> str:
+    """
+    Generate clean, standalone HTML/CSS matching the interactive WYSIWYG canvas layout.
+    Used for pixel-perfect PDF rendering via Chromium.
+    """
+    theme_accent_colors = {
+        "creative": "#0F766E",
+        "executive": "#1E3A8A",
+        "tech": "#0F172A",
+        "academic": "#334155",
+        "minimalist": "#E11D48"
+    }
+    
+    accent_color = custom_color if (custom_color and custom_color.startswith("#")) else theme_accent_colors.get(theme, "#0F766E")
+    
+    # Process contact info
+    contact_info = cv_data.get("contact_info", "")
+    if isinstance(contact_info, list):
+        contact_text = f" &nbsp;│&nbsp; ".join(str(c) for c in contact_info)
+    else:
+        contact_text = str(contact_info)
+        
+    name_str = cv_data.get("name", "Your Name")
+    photo_src = cv_data.get("photo") or ""
+    
+    # Build photo HTML
+    if photo_src:
+        photo_html = f'<img src="{photo_src}" class="cv-photo-frame" alt="Photo" />'
+    else:
+        photo_html = f'''<div class="cv-photo-frame-placeholder" style="background:{accent_color};">
+            <span style="color:white;font-size:12px;font-weight:600;">Photo</span>
+        </div>'''
+        
+    # Build sections
+    sections = cv_data.get("sections", [])
+    
+    def render_section(sec: Dict[str, Any]) -> str:
+        title = sec.get("title", "Section")
+        sec_type = sec.get("type", "text")
+        content = sec.get("content")
+        
+        content_html = ""
+        if sec_type == "text":
+            content_html = f'<div class="sec-content text-sec">{content or ""}</div>'
+        elif sec_type == "list":
+            if isinstance(content, list):
+                items_html = "".join([
+                    f'<div class="skill-item-row"><span class="bullet-marker">{bullet_symbol}</span><span class="skill-chip">{item}</span></div>'
+                    for item in content
+                ])
+                content_html = f'<div class="sec-content list-sec">{items_html}</div>'
+            else:
+                content_html = f'<div class="sec-content text-sec">{content or ""}</div>'
+        elif sec_type in ["experience", "education"]:
+            blocks_html = []
+            if isinstance(content, list):
+                for item in content:
+                    is_exp = sec_type == "experience"
+                    title_val = item.get("role", "") if is_exp else item.get("degree", "")
+                    sub_val = item.get("company", "") if is_exp else item.get("institution", "")
+                    period = item.get("period", "")
+                    location = item.get("location", "")
+                    
+                    bullets_html = ""
+                    bullets = item.get("bullets", [])
+                    if isinstance(bullets, list) and bullets:
+                        b_items = "".join([
+                            f'<div class="bullet-item"><span class="bullet-marker">{bullet_symbol}</span><span class="bullet-text">{b}</span></div>'
+                            for b in bullets
+                        ])
+                        bullets_html = f'<div class="bullets-container">{b_items}</div>'
+                        
+                    meta_badge = ""
+                    if period or location:
+                        meta_parts = []
+                        if period: meta_parts.append(period)
+                        if location: meta_parts.append(location)
+                        meta_badge = f'<div class="item-badge">{" │ ".join(meta_parts)}</div>'
+                        
+                    company_html = f'<span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">{sub_val}</span></span>' if sub_val else ''
+                    
+                    block = f'''
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">{title_val}</span>
+                                {company_html}
+                            </div>
+                            {meta_badge}
+                        </div>
+                        {bullets_html}
+                    </div>
+                    '''
+                    blocks_html.append(block)
+            content_html = f'<div class="sec-content exp-sec">{"".join(blocks_html)}</div>'
+            
+        return f'''
+        <div class="draggable-section" data-type="{sec_type}">
+            <div class="sec-header">
+                <h2 class="sec-title">{title}</h2>
+            </div>
+            {content_html}
+        </div>
+        '''
+
+    # Split for 2col vs 1col
+    if layout_mode == "2col":
+        left_secs = [s for s in sections if s.get("type") in ["list", "education"]]
+        right_secs = [s for s in sections if s.get("type") not in ["list", "education"]]
+        sidebar_html = "".join(render_section(s) for s in left_secs)
+        main_html = "".join(render_section(s) for s in right_secs)
+        layout_html = f'''
+        <div class="cv-2col-layout">
+            <div class="cv-2col-sidebar">{sidebar_html}</div>
+            <div class="cv-2col-main">{main_html}</div>
+        </div>
+        '''
+    else:
+        all_secs_html = "".join(render_section(s) for s in sections)
+        layout_html = f'''
+        <div class="cv-1col-layout">{all_secs_html}</div>
+        '''
+
+    fit_class = "fit-one-page" if fit_one_page else ""
+
+    html_doc = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{name_str} - Resume</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+  
+  :root {{
+    --theme-accent: {accent_color};
+  }}
+  
+  * {{
+    box-sizing: border-box;
+  }}
+  
+  @page {{
+    size: A4 portrait;
+    margin: 0;
+  }}
+  
+  body {{
+    margin: 0;
+    padding: 0;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1E293B;
+    background-color: #FFFFFF;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+  }}
+  
+  .cv-page-table {{
+    width: 100%;
+    height: 100%;
+    min-height: 297mm;
+    border-collapse: collapse;
+    border-spacing: 0;
+  }}
+  
+  .cv-page-table > thead {{
+    display: table-header-group;
+  }}
+  
+  .cv-page-table > thead > tr > th {{
+    padding: 0;
+    font-weight: normal;
+    text-align: left;
+  }}
+  
+  .cv-page-table > tbody > tr > td {{
+    padding: 0;
+    vertical-align: top;
+    height: 100%;
+  }}
+  
+  .cv-header-banner {{
+    background: {accent_color};
+    color: #FFFFFF;
+    padding: 22px 36px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+    width: 100%;
+  }}
+  
+  .cv-photo-frame {{
+    width: 64px;
+    height: 64px;
+    border-radius: 9999px;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    object-fit: cover;
+    flex-shrink: 0;
+  }}
+  
+  .cv-photo-frame-placeholder {{
+    width: 64px;
+    height: 64px;
+    border-radius: 9999px;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.15);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 12px;
+  }}
+  
+  .cv-name {{
+    font-size: 23px;
+    font-weight: 800;
+    color: #FFFFFF;
+    margin: 0 0 3px 0;
+    letter-spacing: -0.01em;
+  }}
+  
+  .cv-contact {{
+    font-size: 11.2px;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+  }}
+  
+  .cv-2col-layout {{
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    width: 100%;
+    min-height: calc(297mm - 110px);
+    height: 100%;
+  }}
+  
+  .cv-2col-sidebar {{
+    background-color: #F8FAFC;
+    border-right: 1.5px solid #E2E8F0;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+    height: 100%;
+  }}
+  
+  .cv-2col-main {{
+    padding: 20px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }}
+  
+  .cv-1col-layout {{
+    padding: 24px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: calc(297mm - 110px);
+    height: 100%;
+  }}
+  
+  .draggable-section {{
+    break-inside: auto;
+  }}
+  
+  .sec-header {{
+    border-bottom: 1.5px solid {accent_color};
+    padding-bottom: 3px;
+    margin-bottom: 7px;
+    break-after: avoid;
+  }}
+  
+  .sec-title {{
+    font-size: 11.8px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: {accent_color};
+    margin: 0;
+  }}
+  
+  /* Line Styles */
+  .line-style-short .item-block,
+  .line-style-short .text-sec {{
+    position: relative;
+    padding-left: 11px;
+  }}
+  .line-style-short .item-block::before,
+  .line-style-short .text-sec::before {{
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 3px;
+    width: 3.5px;
+    height: 18px;
+    background-color: {accent_color};
+    border-radius: 9999px;
+  }}
+  
+  .line-style-full .item-block,
+  .line-style-full .text-sec {{
+    border-left: 3px solid {accent_color};
+    padding-left: 11px;
+  }}
+  
+  .line-style-none .item-block,
+  .line-style-none .text-sec {{
+    padding-left: 2px;
+  }}
+  
+  .text-sec {{
+    font-size: 11.2px;
+    color: #334155;
+    line-height: 1.52;
+    letter-spacing: 0.005em;
+    margin: 0;
+  }}
+  
+  .skill-item-row {{
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 2px 0;
+    break-inside: avoid;
+  }}
+  
+  .bullet-marker {{
+    color: {accent_color};
+    font-weight: 700;
+    font-size: 11px;
+    flex-shrink: 0;
+    line-height: 1.45;
+  }}
+  
+  .skill-chip {{
+    font-size: 10.8px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.4;
+    letter-spacing: 0.005em;
+  }}
+  
+  .item-block {{
+    margin-bottom: 11px;
+    break-inside: auto;
+  }}
+  
+  .item-header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 3px;
+    flex-wrap: wrap;
+    break-after: avoid;
+    break-inside: avoid;
+  }}
+  
+  .item-titles {{
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    flex-wrap: wrap;
+  }}
+  
+  .item-subtitle-wrapper {{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+  }}
+  
+  .item-title {{
+    font-size: 12.2px;
+    font-weight: 700;
+    color: #0F172A;
+  }}
+  
+  .item-at {{
+    font-size: 11px;
+    color: #94A3B8;
+  }}
+  
+  .item-sub-title {{
+    font-size: 11.2px;
+    font-weight: 600;
+    color: #334155;
+  }}
+  
+  .item-badge {{
+    font-size: 9.2px;
+    background-color: #F1F5F9;
+    color: #475569;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid #E2E8F0;
+    font-weight: 500;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+  }}
+  
+  /* Sidebar Item Header & Badge specific handling */
+  .cv-2col-sidebar .item-header {{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }}
+  
+  .cv-2col-sidebar .item-titles {{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }}
+  
+  .cv-2col-sidebar .item-badge {{
+    margin-top: 2px;
+  }}
+  
+  .bullets-container {{
+    margin-top: 3.5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }}
+  
+  .bullet-item {{
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 1px 0;
+    break-inside: avoid;
+  }}
+  
+  .bullet-text {{
+    font-size: 10.9px;
+    color: #334155;
+    line-height: 1.48;
+    letter-spacing: 0.005em;
+  }}
+  
+  /* 📄 Fit to 1 Page compact scaling rules */
+  .fit-one-page .cv-header-banner {{ padding: 22px 36px; gap: 20px; }}
+  .fit-one-page .cv-photo-frame {{ width: 64px; height: 64px; }}
+  .fit-one-page .cv-photo-frame-placeholder {{ width: 64px; height: 64px; font-size: 12px; }}
+  .fit-one-page .cv-name {{ font-size: 22.5px; margin: 0 0 3px 0; }}
+  .fit-one-page .cv-contact {{ font-size: 11px; line-height: 1.38; letter-spacing: 0.01em; }}
+  .fit-one-page .cv-2col-layout {{ min-height: calc(297mm - 110px); height: 100%; }}
+  .fit-one-page .cv-2col-sidebar {{ padding: 18px 18px; gap: 15px; min-height: 100%; height: 100%; }}
+  .fit-one-page .cv-2col-main {{ padding: 18px 26px; gap: 16px; }}
+  .fit-one-page .sec-header {{ margin-bottom: 6px; padding-bottom: 2.5px; }}
+  .fit-one-page .sec-title {{ font-size: 11.5px; }}
+  .fit-one-page .text-sec {{ font-size: 11px; line-height: 1.5; letter-spacing: 0.005em; }}
+  .fit-one-page .item-block {{ margin-bottom: 10.5px; padding-left: 10px; }}
+  .fit-one-page .item-block::before, .fit-one-page .text-sec::before {{ height: 16px; top: 2px; }}
+  .fit-one-page .item-title {{ font-size: 12px; }}
+  .fit-one-page .item-sub-title {{ font-size: 11px; }}
+  .fit-one-page .item-badge {{ font-size: 9px; padding: 1.5px 6px; }}
+  .fit-one-page .skill-item-row {{ padding: 1.5px 0; gap: 5px; }}
+  .fit-one-page .skill-chip {{ font-size: 10.5px; line-height: 1.35; letter-spacing: 0.005em; }}
+  .fit-one-page .bullet-marker {{ font-size: 10.5px; }}
+  .fit-one-page .bullet-item {{ margin: 0.5px 0; gap: 5px; }}
+  .fit-one-page .bullet-text {{ font-size: 10.8px; line-height: 1.46; letter-spacing: 0.005em; }}
+  .fit-one-page .bullets-container {{ margin-top: 3px; gap: 1.5px; }}
+</style>
+</head>
+<body class="theme-{theme} layout-{layout_mode} line-style-{line_style} {fit_class}">
+  <table class="cv-page-table">
+    <thead>
+      <tr>
+        <th>
+          <div class="cv-header-banner">
+            {photo_html}
+            <div style="flex:1;">
+              <h1 class="cv-name">{name_str}</h1>
+              <div class="cv-contact">{contact_text}</div>
+            </div>
+          </div>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          {layout_html}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>'''
+    return html_doc
+
+
+def save_cv_as_pdf_html(
+    cv_data: Dict[str, Any],
+    output_path: str,
+    theme: str = "creative",
+    custom_color: Optional[str] = None,
+    line_style: str = "short",
+    bullet_symbol: str = "│",
+    layout_mode: str = "2col",
+    fit_one_page: bool = False
+) -> None:
+    """
+    Render pixel-perfect PDF using headless Chromium via Playwright.
+    Matches the interactive HTML preview 100% in fonts, layout, and colors.
+    """
+    from playwright.sync_api import sync_playwright
+    
+    html_content = generate_html_for_cv(
+        cv_data=cv_data,
+        theme=theme,
+        custom_color=custom_color,
+        line_style=line_style,
+        bullet_symbol=bullet_symbol,
+        layout_mode=layout_mode,
+        fit_one_page=fit_one_page
+    )
+    
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(html_content, wait_until="networkidle")
+        page.pdf(
+            path=output_path,
+            format="A4",
+            print_background=True,
+            margin={"top": "0px", "bottom": "0px", "left": "0px", "right": "0px"},
+            prefer_css_page_size=True
+        )
+        browser.close()
+
+
+def save_cv_as_pdf_reportlab(
+    cv_data: Dict[str, Any],
+    output_path: str,
+    theme: str = "minimalist",
+    custom_color: Optional[str] = None,
+    line_style: str = "short",
+    bullet_symbol: str = "│",
+    layout_mode: str = "2col",
+    fit_one_page: bool = False
+) -> None:
     """Save CV JSON data to an ATS-friendly, professional PDF using ReportLab."""
+    top_m = 22 if fit_one_page else 38
+    bot_m = 22 if fit_one_page else 38
+    side_m = 36 if fit_one_page else 44
     doc = SimpleDocTemplate(
         output_path,
         pagesize=letter,
-        leftMargin=36,  # reduced margin (0.5 inch)
-        rightMargin=36,
-        topMargin=36,
-        bottomMargin=36
+        leftMargin=side_m,
+        rightMargin=side_m,
+        topMargin=top_m,
+        bottomMargin=bot_m
     )
     
     styles = getSampleStyleSheet()
@@ -573,32 +1139,32 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
     font_italic = u_ital
     
     name_font = u_bold
-    name_size = 20
-    name_leading = 24
+    name_size = 16 if fit_one_page else 20
+    name_leading = 20 if fit_one_page else 24
     name_color = colors.HexColor('#1A1A1A')
     name_align = TA_CENTER
     
     contact_font = u_reg
-    contact_size = 9.5
-    contact_leading = 12
+    contact_size = 8.5 if fit_one_page else 9.5
+    contact_leading = 11 if fit_one_page else 12
     contact_color = colors.HexColor('#4A4A4A')
     contact_align = TA_CENTER
     
     heading_font = u_bold
-    heading_size = 12
-    heading_leading = 14
+    heading_size = 10.5 if fit_one_page else 12
+    heading_leading = 12.5 if fit_one_page else 14
     heading_color = colors.HexColor('#1A1A1A')
     heading_align = TA_LEFT
     heading_line_color = colors.HexColor('#CCCCCC')
     
     body_font = u_reg
-    body_size = 10
-    body_leading = 14
+    body_size = 8.5 if fit_one_page else 10
+    body_leading = 11.5 if fit_one_page else 14
     body_color = colors.HexColor('#2D2D2D')
     
     bullet_font = u_reg
-    bullet_size = 9.5
-    bullet_leading = 13.5
+    bullet_size = 8.5 if fit_one_page else 9.5
+    bullet_leading = 11.5 if fit_one_page else 13.5
     bullet_color = colors.HexColor('#2D2D2D')
     
     if theme == "executive":
@@ -707,7 +1273,8 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
             heading_line_color = colors.HexColor(custom_color)
             name_color = colors.HexColor(custom_color)
             title_color_hex = custom_color
-        except Exception:
+        except Exception as e:
+            print(f"[parser] Invalid custom hex color '{custom_color}' for PDF styling: {e}")
             pass
 
     # Custom Styles
@@ -859,7 +1426,6 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
             spaceAfter=4,
         )
         sec_hr.keepWithNext = True
-        # Append heading and line separator directly; keepWithNext ensures they stay together
         sec_elements.append(sec_heading)
         sec_elements.append(sec_hr)
 
@@ -986,3 +1552,65 @@ def save_cv_as_pdf(cv_data: Dict[str, Any], output_path: str, theme: str = "mini
         doc.build(story, onFirstPage=draw_executive_decorations, onLaterPages=draw_executive_decorations)
     else:
         doc.build(story)
+
+
+def save_cv_as_pdf(
+    cv_data: Dict[str, Any],
+    output_path: str,
+    theme: str = "minimalist",
+    custom_color: Optional[str] = None,
+    line_style: str = "short",
+    bullet_symbol: str = "│",
+    layout_mode: str = "2col",
+    pdf_engine: str = "html",
+    fit_one_page: bool = False
+) -> None:
+    """
+    Main PDF generator dispatcher supporting 3 distinct rendering modes:
+    1. 'html' (Pixel-Perfect HTML/Chromium Engine) - 1:1 match with the interactive HTML preview canvas.
+    2. 'executive' (ReportLab 2-Column Sidebar Vector Engine) - fast vector PDF with sidebar grid.
+    3. 'classic' (ReportLab 1-Column ATS Linear Engine) - clean linear format optimized for traditional ATS parsers.
+    """
+    engine = (pdf_engine or "html").lower().strip()
+    
+    if engine in ["html", "playwright", "canvas", "pixel_perfect"]:
+        try:
+            save_cv_as_pdf_html(
+                cv_data=cv_data,
+                output_path=output_path,
+                theme=theme,
+                custom_color=custom_color,
+                line_style=line_style,
+                bullet_symbol=bullet_symbol,
+                layout_mode=layout_mode,
+                fit_one_page=fit_one_page
+            )
+            return
+        except Exception as e:
+            print(f"[parser] HTML PDF rendering via Chromium failed: {e}. Falling back to ReportLab vector engine.")
+            pass
+            
+    if engine in ["classic", "reportlab_1col", "ats", "1col"]:
+        save_cv_as_pdf_reportlab(
+            cv_data=cv_data,
+            output_path=output_path,
+            theme=theme,
+            custom_color=custom_color,
+            line_style=line_style,
+            bullet_symbol=bullet_symbol,
+            layout_mode="1col",
+            fit_one_page=fit_one_page
+        )
+    else:
+        # Default executive / 2col vector engine
+        save_cv_as_pdf_reportlab(
+            cv_data=cv_data,
+            output_path=output_path,
+            theme=theme,
+            custom_color=custom_color,
+            line_style=line_style,
+            bullet_symbol=bullet_symbol,
+            layout_mode=layout_mode,
+            fit_one_page=fit_one_page
+        )
+

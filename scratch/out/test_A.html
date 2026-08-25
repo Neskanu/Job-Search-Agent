@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vytautas Jurgaitis - Resume</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+  
+  :root {
+    --theme-accent: #0F766E;
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+  
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1E293B;
+    background-color: #FFFFFF;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .cv-page-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+  
+  .cv-page-table > thead {
+    display: table-header-group;
+  }
+  
+  .cv-page-table > thead > tr > th {
+    padding: 0;
+    font-weight: normal;
+    text-align: left;
+  }
+  
+  .cv-page-table > tbody > tr > td {
+    padding: 0;
+    vertical-align: top;
+  }
+  
+  .cv-header-banner {
+    background: #0F766E;
+    color: #FFFFFF;
+    padding: 24px 36px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-shrink: 0;
+    width: 100%;
+  }
+  
+  .cv-photo-frame {
+    width: 70px;
+    height: 70px;
+    border-radius: 9999px;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  
+  .cv-photo-frame-placeholder {
+    width: 70px;
+    height: 70px;
+    border-radius: 9999px;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.15);
+  }
+  
+  .cv-name {
+    font-size: 24px;
+    font-weight: 800;
+    color: #FFFFFF;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+  
+  .cv-contact {
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  
+  .cv-2col-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    width: 100%;
+  }
+  
+  .cv-2col-sidebar {
+    background-color: #F8FAFC;
+    border-right: 1.5px solid #E2E8F0;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+  }
+  
+  .cv-2col-main {
+    padding: 20px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  
+  .cv-1col-layout {
+    padding: 24px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  
+  .draggable-section {
+    break-inside: auto;
+  }
+  
+  .sec-header {
+    border-bottom: 1.5px solid #0F766E;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+    break-after: avoid;
+  }
+  
+  .sec-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #0F766E;
+    margin: 0;
+  }
+  
+  /* Line Styles */
+  .line-style-short .item-block,
+  .line-style-short .text-sec {
+    position: relative;
+    padding-left: 11px;
+  }
+  .line-style-short .item-block::before,
+  .line-style-short .text-sec::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 3.5px;
+    height: 18px;
+    background-color: #0F766E;
+    border-radius: 9999px;
+  }
+  
+  .line-style-full .item-block,
+  .line-style-full .text-sec {
+    border-left: 3px solid #0F766E;
+    padding-left: 11px;
+  }
+  
+  .line-style-none .item-block,
+  .line-style-none .text-sec {
+    padding-left: 2px;
+  }
+  
+  .text-sec {
+    font-size: 11.5px;
+    color: #334155;
+    line-height: 1.58;
+    margin: 0;
+  }
+  
+  .skill-item-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 2px 0;
+    break-inside: avoid;
+  }
+  
+  .bullet-marker {
+    color: #0F766E;
+    font-weight: 700;
+    font-size: 11.5px;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+  
+  .skill-chip {
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.4;
+  }
+  
+  .item-block {
+    margin-bottom: 12px;
+    break-inside: auto;
+  }
+  
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 3px;
+    flex-wrap: wrap;
+    break-after: avoid;
+    break-inside: avoid;
+  }
+  
+  .item-titles {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  
+  .item-subtitle-wrapper {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+  
+  .item-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+  
+  .item-at {
+    font-size: 11px;
+    color: #94A3B8;
+  }
+  
+  .item-sub-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #334155;
+  }
+  
+  .item-badge {
+    font-size: 9.5px;
+    background-color: #F1F5F9;
+    color: #475569;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid #E2E8F0;
+    font-weight: 500;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+  }
+  
+  /* Sidebar Item Header & Badge specific handling */
+  .cv-2col-sidebar .item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  
+  .cv-2col-sidebar .item-titles {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  
+  .cv-2col-sidebar .item-badge {
+    margin-top: 2px;
+  }
+  
+  .bullets-container {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .bullet-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 1px 0;
+    break-inside: avoid;
+  }
+  
+  .bullet-text {
+    font-size: 11px;
+    color: #334155;
+    line-height: 1.5;
+  }
+  
+  /* 📄 Fit to 1 Page compact scaling rules */
+  .fit-one-page .cv-header-banner { padding: 14px 28px; gap: 16px; }
+  .fit-one-page .cv-photo-frame { width: 52px; height: 52px; }
+  .fit-one-page .cv-photo-frame-placeholder { width: 52px; height: 52px; font-size: 11px; }
+  .fit-one-page .cv-name { font-size: 20px; margin: 0 0 2px 0; }
+  .fit-one-page .cv-contact { font-size: 10px; line-height: 1.3; }
+  .fit-one-page .cv-2col-sidebar { padding: 12px 14px; gap: 9px; }
+  .fit-one-page .cv-2col-main { padding: 12px 20px; gap: 10px; }
+  .fit-one-page .sec-header { margin-bottom: 4px; padding-bottom: 2px; }
+  .fit-one-page .sec-title { font-size: 10.5px; }
+  .fit-one-page .text-sec { font-size: 10px; line-height: 1.38; }
+  .fit-one-page .item-block { margin-bottom: 6px; padding-left: 9px; }
+  .fit-one-page .item-block::before, .fit-one-page .text-sec::before { height: 14px; top: 2px; }
+  .fit-one-page .item-title { font-size: 11px; }
+  .fit-one-page .item-sub-title { font-size: 10px; }
+  .fit-one-page .item-badge { font-size: 8.5px; padding: 1px 5px; }
+  .fit-one-page .skill-item-row { padding: 1px 0; gap: 4px; }
+  .fit-one-page .skill-chip { font-size: 9.5px; line-height: 1.3; }
+  .fit-one-page .bullet-marker { font-size: 9.5px; }
+  .fit-one-page .bullet-item { margin: 0; gap: 4px; }
+  .fit-one-page .bullet-text { font-size: 9.5px; line-height: 1.35; }
+  .fit-one-page .bullets-container { margin-top: 2px; gap: 1px; }
+</style>
+
+    <style>
+    .fit-one-page .cv-header-banner { padding: 20px 32px; gap: 20px; }
+    .fit-one-page .cv-photo-frame-placeholder { width: 62px; height: 62px; font-size: 12px; }
+    .fit-one-page .cv-name { font-size: 22px; margin: 0 0 3px 0; }
+    .fit-one-page .cv-contact { font-size: 11px; line-height: 1.35; }
+    .fit-one-page .cv-2col-sidebar { padding: 16px 16px; gap: 14px; }
+    .fit-one-page .cv-2col-main { padding: 16px 24px; gap: 14px; }
+    .fit-one-page .sec-header { margin-bottom: 6px; padding-bottom: 2.5px; }
+    .fit-one-page .sec-title { font-size: 11.5px; }
+    .fit-one-page .text-sec { font-size: 11px; line-height: 1.48; }
+    .fit-one-page .item-block { margin-bottom: 9px; padding-left: 10px; }
+    .fit-one-page .item-block::before, .fit-one-page .text-sec::before { height: 16px; top: 2px; }
+    .fit-one-page .item-title { font-size: 11.8px; }
+    .fit-one-page .item-sub-title { font-size: 11px; }
+    .fit-one-page .item-badge { font-size: 9px; padding: 1.5px 6px; }
+    .fit-one-page .skill-item-row { padding: 1.5px 0; gap: 5px; }
+    .fit-one-page .skill-chip { font-size: 10.5px; line-height: 1.35; }
+    .fit-one-page .bullet-marker { font-size: 10.5px; }
+    .fit-one-page .bullet-item { margin: 0.5px 0; gap: 5px; }
+    .fit-one-page .bullet-text { font-size: 10.5px; line-height: 1.42; }
+    .fit-one-page .bullets-container { margin-top: 3px; gap: 1.5px; }
+    </style>
+    </head>
+<body class="fit-one-page theme-creative layout-2col line-style-short ">
+  <table class="cv-page-table">
+    <thead>
+      <tr>
+        <th>
+          <div class="cv-header-banner">
+            <div class="cv-photo-frame-placeholder" style="background:#0F766E;">
+            <span style="color:white;font-size:12px;font-weight:600;">Photo</span>
+        </div>
+            <div style="flex:1;">
+              <h1 class="cv-name">Vytautas Jurgaitis</h1>
+              <div class="cv-contact">vjurgaitis@gmail.com &nbsp;│&nbsp; +37067302309 &nbsp;│&nbsp; Vilnius, Lithuania &nbsp;│&nbsp; linkedin.com/in/vjurgaitis</div>
+            </div>
+          </div>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          
+        <div class="cv-2col-layout">
+            <div class="cv-2col-sidebar">
+        <div class="draggable-section" data-type="list">
+            <div class="sec-header">
+                <h2 class="sec-title">Core Competencies & Tools</h2>
+            </div>
+            <div class="sec-content list-sec"><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">AI Platforms & Practical Automation: Claude, Microsoft Copilot, Kiro, Python Scripting</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Project & Program Operations: Multi-Workstream Coordination, Agile/Scrum</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Collaboration & Productivity: Jira, Confluence, Slack, Google Workspace</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Stakeholder & Adoption Management: Non-Technical AI Coaching & Habit Building</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Reporting & Metrics: Performance Tracking, Automated Dashboards, Feedback Loops</span></div></div>
+        </div>
+        
+        <div class="draggable-section" data-type="education">
+            <div class="sec-header">
+                <h2 class="sec-title">Education</h2>
+            </div>
+            <div class="sec-content exp-sec">
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Python Programming and AI</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">Code Academy</span></span>
+                            </div>
+                            <div class="item-badge">Completed: April 2026 │ Vilnius, Lithuania</div>
+                        </div>
+                        
+                    </div>
+                    
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Master of Law</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">Vilnius University</span></span>
+                            </div>
+                            <div class="item-badge">Graduated: 2006 │ Vilnius, Lithuania</div>
+                        </div>
+                        
+                    </div>
+                    </div>
+        </div>
+        
+        <div class="draggable-section" data-type="list">
+            <div class="sec-header">
+                <h2 class="sec-title">Languages</h2>
+            </div>
+            <div class="sec-content list-sec"><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">English: Fluent (Full professional written and spoken capability)</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Lithuanian: Native / Fluent</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Russian: Fluent</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">German: Intermediate</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Norwegian: Basic</span></div><div class="skill-item-row"><span class="bullet-marker">│</span><span class="skill-chip">Polish: Basic</span></div></div>
+        </div>
+        </div>
+            <div class="cv-2col-main">
+        <div class="draggable-section" data-type="text">
+            <div class="sec-header">
+                <h2 class="sec-title">Professional Summary</h2>
+            </div>
+            <div class="sec-content text-sec">Dynamic and process-driven AI Enablement and Project Lead with over 15 years of experience building lightweight processes, cross-functional programs, and technical adoption initiatives. Proven track record in guiding non-technical teams—across Growth, Brand, Media, and Data—to build practical, everyday habits around AI tools including Claude, Copilot, and Python-driven automation. Adept at keeping fast-moving AI initiatives visible and organized using tools like Jira, Confluence, Slack, spreadsheets, and slide decks. Strong cross-functional communicator skilled at driving alignment, establishing automated reporting rhythms, and keeping multi-workstream projects on schedule without needing formal authority.</div>
+        </div>
+        
+        <div class="draggable-section" data-type="experience">
+            <div class="sec-header">
+                <h2 class="sec-title">Professional Experience</h2>
+            </div>
+            <div class="sec-content exp-sec">
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">AI Consultant & Enablement Lead</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">Micro1, Appen, Volga Partners</span></span>
+                            </div>
+                            <div class="item-badge">January 2025 - Present │ Vilnius, Lithuania</div>
+                        </div>
+                        <div class="bullets-container"><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Own and coordinate dedicated AI workstreams, ensuring high visibility, clear progress tracking, and cross-functional alignment across multiple technical and non-technical stakeholders.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Leverage generative AI tools (Claude, Copilot, Python scripts) to automate daily admin, research, and project reporting routines, serving as a hands-on power user.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Translate complex AI capabilities and workflows into modular, easy-to-follow enablement documentation and training assets.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Establish recurring reporting rhythms and utilized platform analytics to track initiative milestone progress and present clear updates during business reviews.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Converted complex technical software and hardware operational workflows into clear, modular training guides and structured procedural backlogs.</span></div></div>
+                    </div>
+                    
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Senior Training Manager</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">Samsung Electronics Baltics</span></span>
+                            </div>
+                            <div class="item-badge">2016 - 2023 │ Vilnius, Lithuania</div>
+                        </div>
+                        <div class="bullets-container"><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Led a high-performing team of 12 across the Baltics, overseeing technical product enablement and operational process rollout for 2,000+ frontline and support personnel.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Successfully fostered tool and process adoption across diverse teams without formal direct authority, achieving high engagement and compliance.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Analyzed CSAT, performance KPIs, and engagement data to evaluate initiative impact, maintaining streamlined reporting dashboards for executive reviews.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Designed AI-assisted support workflows and interactive decision trees that significantly improved operational resolution speed and user knowledge retention.</span></div></div>
+                    </div>
+                    
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Training / Knowledge / Content Manager</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">CSC Baltic</span></span>
+                            </div>
+                            <div class="item-badge">2008 - 2016 │ Vilnius, Lithuania</div>
+                        </div>
+                        <div class="bullets-container"><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Headed a 15-person delivery and content team, establishing robust onboarding structures and systematic procedural workflows across global teams.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Collaborated with technical subject matter experts (SMEs) to design structured system guides, interactive decision trees, and backlog documentation.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Conducted task and workflow analyses to optimize operational efficiency and resolve cross-departmental dependency blockers early.</span></div></div>
+                    </div>
+                    
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Operational Excellence Specialist</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">Enterprise Global Services</span></span>
+                            </div>
+                            <div class="item-badge">2005 - 2008 │ Vilnius, Lithuania</div>
+                        </div>
+                        <div class="bullets-container"><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Spearheaded operational process mapping and standard operating procedure documentation.</span></div><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Trained over 500 new hires across multiple business units on compliance and quality frameworks.</span></div></div>
+                    </div>
+                    
+                    <div class="item-block">
+                        <div class="item-header">
+                            <div class="item-titles">
+                                <span class="item-title">Junior Program Associate</span>
+                                <span class="item-subtitle-wrapper"><span class="item-at">@</span> <span class="item-sub-title">International Business Hub</span></span>
+                            </div>
+                            <div class="item-badge">2003 - 2005 │ Vilnius, Lithuania</div>
+                        </div>
+                        <div class="bullets-container"><div class="bullet-item"><span class="bullet-marker">│</span><span class="bullet-text">Assisted program managers in milestone scheduling and cross-team communication.</span></div></div>
+                    </div>
+                    </div>
+        </div>
+        </div>
+        </div>
+        
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

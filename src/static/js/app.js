@@ -17,6 +17,8 @@ const cvState = {
   lineStyle: "short",
   bulletSymbol: "│",
   customColor: "#0F766E",
+  pdfEngine: "html",
+  fitOnePage: false,
   photo: null
 };
 
@@ -907,16 +909,18 @@ function renderWYSIWYG(cvData) {
 
             contentHTML += `
               <div class="item-block border-l-3 pl-3 py-0.5 mb-2 relative group/item rounded-r-md" data-idx="${itemIdx}">
-                <div class="flex flex-wrap justify-between items-start gap-2 mb-0.5">
-                  <div class="flex items-center gap-1.5 flex-wrap">
+                <div class="item-header flex flex-wrap justify-between items-start gap-1.5 mb-0.5">
+                  <div class="item-titles flex items-baseline gap-1.5 flex-wrap">
                     <span contenteditable="true" class="item-title text-xs font-bold text-slate-900 outline-none">${titleVal}</span>
-                    <span class="text-slate-400 font-medium text-xs">@</span>
-                    <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 text-xs outline-none">${subTitleVal}</span>
+                    ${subTitleVal ? `<span class="item-subtitle-wrapper text-xs inline-flex items-baseline gap-1"><span class="text-slate-400 font-normal">@</span> <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none">${subTitleVal}</span></span>` : `<span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none hidden"></span>`}
                   </div>
-                  <div class="flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
-                    <span contenteditable="true" class="item-period outline-none">${period}</span>
-                    ${location ? `<span class="text-slate-300">│</span> <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
-                  </div>
+                  ${(period || location) ? `
+                    <div class="item-badge-wrapper">
+                      <div class="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                        <span contenteditable="true" class="item-period outline-none">${period}</span>
+                        ${location ? `<span class="text-slate-300">│</span> <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
+                      </div>
+                    </div>` : `<div class="item-badge-wrapper hidden"><span contenteditable="true" class="item-period outline-none hidden"></span><span contenteditable="true" class="item-location outline-none hidden"></span></div>`}
                 </div>
                 ${bulletsHTML}
                 
@@ -1161,6 +1165,7 @@ async function saveAndCompile() {
   activeCV.photo = cvState.photo || null;
 
   try {
+    const pdfEngineVal = cvState.pdfEngine || document.getElementById("cv-pdf-engine-select")?.value || "html";
     const response = await fetch("/api/generate-docs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1172,7 +1177,9 @@ async function saveAndCompile() {
         custom_color: cvState.customColor || "#0F766E",
         line_style: cvState.lineStyle || "short",
         bullet_symbol: cvState.bulletSymbol || "│",
-        layout_mode: cvState.layoutMode || "2col"
+        layout_mode: cvState.layoutMode || "2col",
+        pdf_engine: pdfEngineVal,
+        fit_one_page: !!cvState.fitOnePage
       })
     });
 
@@ -1363,18 +1370,19 @@ function setViewMode(mode) {
   
   if (!editor || !preview) return;
   
-  // Update button active states
+  // Cleanly reset active styling from all buttons and restore default styling
   [btnEdit, btnSplit, btnPreview].forEach(btn => {
     if (btn) {
-      btn.classList.remove("bg-white", "text-slate-800", "shadow-sm");
-      btn.classList.add("text-slate-600", "hover:text-slate-800");
+      btn.classList.remove("bg-slate-900", "text-white", "shadow-xs", "shadow-sm", "bg-white", "text-slate-800");
+      btn.classList.add("text-slate-600", "hover:text-slate-900");
     }
   });
   
+  // Apply active styling to the currently active view mode button
   const activeBtn = document.getElementById(`btn-mode-${mode}`);
   if (activeBtn) {
-    activeBtn.classList.remove("text-slate-600", "hover:text-slate-800");
-    activeBtn.classList.add("bg-white", "text-slate-800", "shadow-sm");
+    activeBtn.classList.remove("text-slate-600", "hover:text-slate-900");
+    activeBtn.classList.add("bg-slate-900", "text-white", "shadow-xs");
   }
   
   if (mode === "edit") {
@@ -1397,6 +1405,54 @@ function setViewMode(mode) {
   }
   
   localStorage.setItem("cv_view_mode", mode);
+}
+
+/**
+ * Handle user switching between the 3 PDF rendering engines.
+ */
+function changePDFEngine(engine) {
+  cvState.pdfEngine = engine || "html";
+  saveAppStateToCache();
+  const names = {
+    html: "✨ HTML Canvas (Pixel-Perfect)",
+    executive: "📐 Executive 2-Col (ReportLab)",
+    classic: "📄 Classic 1-Col ATS (ReportLab)"
+  };
+  showToast(`PDF Engine: ${names[engine] || engine}`);
+  saveAndCompile();
+}
+
+/**
+ * Toggle the "Fit CV to 1 Page" compact layout mode.
+ */
+function toggleFitOnePage(forceVal) {
+  if (typeof forceVal === "boolean") {
+    cvState.fitOnePage = forceVal;
+  } else {
+    cvState.fitOnePage = !cvState.fitOnePage;
+  }
+
+  const btn = document.getElementById("btn-fit-one-page");
+  const resumeSheet = document.getElementById("resume-sheet");
+
+  if (cvState.fitOnePage) {
+    if (btn) {
+      btn.classList.remove("bg-white", "text-slate-700", "border-slate-200");
+      btn.classList.add("bg-teal-700", "text-white", "border-teal-800", "shadow-sm");
+    }
+    if (resumeSheet) resumeSheet.classList.add("fit-one-page");
+    showToast("📄 Fit to 1 Page: Enabled");
+  } else {
+    if (btn) {
+      btn.classList.remove("bg-teal-700", "text-white", "border-teal-800", "shadow-sm");
+      btn.classList.add("bg-white", "text-slate-700", "border-slate-200");
+    }
+    if (resumeSheet) resumeSheet.classList.remove("fit-one-page");
+    showToast("📄 Fit to 1 Page: Disabled (Multi-Page)");
+  }
+
+  saveAppStateToCache();
+  saveAndCompile();
 }
 
 /**
@@ -1443,14 +1499,14 @@ function getLLMConfig() {
     const url = document.getElementById("ollama-url")?.value || "http://localhost:11434";
     const model = getSelectedModel("ollama");
     return {
-      ollama_url: url,
+      ollama_base_url: url,
       ollama_model: model
     };
   }
 }
 
 /**
- * Toggle visibility of custom model text input.
+ * Toggle custom text input visibility when user chooses "Custom" in model dropdown.
  */
 function toggleCustomModelInput(provider) {
   const select = document.getElementById(`${provider}-model-select`);
@@ -1477,6 +1533,8 @@ function saveAppStateToCache() {
     tailoredDocxPath: cvState.tailoredDocxPath,
     tailoredPdfPath: cvState.tailoredPdfPath,
     theme: cvState.theme,
+    pdfEngine: cvState.pdfEngine,
+    fitOnePage: cvState.fitOnePage,
     photo: cvState.photo,
     
     // Inputs
@@ -1518,7 +1576,9 @@ function loadAppStateFromCache() {
     cvState.tailoredCvData = state.tailoredCvData || null;
     cvState.tailoredDocxPath = state.tailoredDocxPath || null;
     cvState.tailoredPdfPath = state.tailoredPdfPath || null;
-    cvState.theme = state.theme || "minimalist";
+    cvState.theme = state.theme || "creative";
+    cvState.pdfEngine = state.pdfEngine || "html";
+    cvState.fitOnePage = !!state.fitOnePage;
     cvState.photo = state.photo || null;
     
     if (document.getElementById("gemini-key")) document.getElementById("gemini-key").value = state.geminiKey || "";
@@ -1545,6 +1605,19 @@ function loadAppStateFromCache() {
     
     if (document.getElementById("cv-theme-select")) {
       document.getElementById("cv-theme-select").value = cvState.theme;
+    }
+    if (document.getElementById("cv-pdf-engine-select")) {
+      document.getElementById("cv-pdf-engine-select").value = cvState.pdfEngine;
+    }
+    
+    const btnFit = document.getElementById("btn-fit-one-page");
+    const resumeSheet = document.getElementById("resume-sheet");
+    if (cvState.fitOnePage) {
+      if (btnFit) {
+        btnFit.classList.remove("bg-white", "text-slate-700", "border-slate-200");
+        btnFit.classList.add("bg-teal-700", "text-white", "border-teal-800", "shadow-sm");
+      }
+      if (resumeSheet) resumeSheet.classList.add("fit-one-page");
     }
     
     if (cvState.selectedJob) {
@@ -2054,7 +2127,8 @@ async function startGuidedApply(portalUrl, company, jobTitle) {
 
 function startGuidedPolling() {
   if (_guidedPollInterval) clearInterval(_guidedPollInterval);
-  _guidedPollInterval = setInterval(pollGuidedApplyStatus, 2000);
+  pollGuidedApplyStatus();
+  _guidedPollInterval = setInterval(pollGuidedApplyStatus, 1000);
 }
 
 async function pollGuidedApplyStatus() {
@@ -2068,6 +2142,24 @@ async function pollGuidedApplyStatus() {
     document.getElementById('guided-status-text').textContent = `Status: ${data.status.toUpperCase()} (Step ${data.current_step}/${data.total_steps})`;
     document.getElementById('guided-last-action').textContent = data.last_action || 'Processing...';
 
+    if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+      const logsContainer = document.getElementById('guided-live-logs');
+      if (logsContainer) {
+        logsContainer.innerHTML = data.logs.map(logStr => {
+          let colorClass = "text-slate-300";
+          if (logStr.includes("Error") || logStr.includes("Warning") || logStr.includes("failed")) {
+            colorClass = "text-rose-400 font-semibold";
+          } else if (logStr.includes("Navigating") || logStr.includes("Switched") || logStr.includes("Injected") || logStr.includes("Browser")) {
+            colorClass = "text-cyan-300 font-semibold";
+          } else if (logStr.includes("Completed") || logStr.includes("filled")) {
+            colorClass = "text-emerald-400 font-semibold";
+          }
+          return `<div class="${colorClass}">${escapeHtml(logStr)}</div>`;
+        }).join('');
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      }
+    }
+
     if (data.status === 'paused' && data.paused_field) {
       renderGuidedPausedField(data.paused_field);
     } else {
@@ -2076,7 +2168,7 @@ async function pollGuidedApplyStatus() {
 
     if (data.status === 'completed') {
       clearInterval(_guidedPollInterval);
-      showToast(`🎉 Guided Apply completed for ${data.company}!`);
+      showToast(`🎉 Guided Apply completed for ${data.company}! Review application in Chromium window.`);
       loadApplicationHistory();
     } else if (data.status === 'failed') {
       clearInterval(_guidedPollInterval);
@@ -2091,8 +2183,6 @@ async function pollGuidedApplyStatus() {
 let _activeDraftUserAnswer = "";
 
 function renderGuidedPausedField(pausedField) {
-  // If the exact same field is being polled, DO NOT touch the DOM or screenshot,
-  // so the user's active typing and option selections are never wiped out!
   if (_lastRenderedFieldLabel === pausedField.label) {
     return;
   }
@@ -2105,7 +2195,12 @@ function renderGuidedPausedField(pausedField) {
   const inputWrapper = document.getElementById('guided-field-input-wrapper');
 
   container.classList.remove('hidden');
-  img.src = pausedField.screenshot_b64 || '';
+  if (pausedField.screenshot_b64) {
+    img.src = `data:image/png;base64,${pausedField.screenshot_b64}`;
+    img.classList.remove('hidden');
+  } else {
+    img.classList.add('hidden');
+  }
   labelEl.textContent = pausedField.label;
 
   if (pausedField.field_type === 'captcha') {

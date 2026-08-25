@@ -169,3 +169,43 @@ def test_is_uuid_or_random_id():
     assert is_uuid_or_random_id("Years of Experience") is False
 
 
+def test_is_target_closed_error():
+    """Verify target closed error message detector."""
+    from src.guided_applier import is_target_closed_error
+
+    err1 = Exception("Page.evaluate: Target page, context or browser has been closed")
+    err2 = Exception("Page.query_selector_all: Target page, context or browser has been closed")
+    err3 = Exception("Some other network timeout error")
+
+    assert is_target_closed_error(err1) is True
+    assert is_target_closed_error(err2) is True
+    assert is_target_closed_error(err3) is False
+    assert is_target_closed_error(None) is False
+
+
+def test_get_active_page():
+    """Verify active page resolution logic."""
+    from src.guided_applier import get_active_page
+
+    page_open = MagicMock()
+    page_open.is_closed.return_value = False
+
+    page_closed = MagicMock()
+    page_closed.is_closed.return_value = True
+
+    context_mock = MagicMock()
+    context_mock.pages = [page_closed, page_open]
+
+    # Current page is open -> returns current page
+    assert get_active_page(context_mock, page_open) == page_open
+
+    # Current page is closed -> falls back to open page in context
+    assert get_active_page(context_mock, page_closed) == page_open
+
+    # All pages closed -> returns None
+    context_all_closed = MagicMock()
+    context_all_closed.pages = [page_closed]
+    assert get_active_page(context_all_closed, page_closed) is None
+
+
+

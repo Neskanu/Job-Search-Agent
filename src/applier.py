@@ -239,10 +239,11 @@ def detect_and_answer_screening_questions(
                 answer = opts[1].get_attribute("value") if len(opts) > 1 else ""
             try:
                 select_el.select_option(value=answer)
-            except Exception:
+            except Exception as e_val:
                 try:
                     select_el.select_option(label=answer)
-                except Exception:
+                except Exception as e_lbl:
+                    print(f"[applier] Failed to select option '{answer}' by value ({e_val}) and label ({e_lbl})")
                     pass
             human_delay(0.5, 1.0)
             answers_given[question_text] = answer
@@ -441,7 +442,8 @@ def apply_to_job(
         if sys.platform == "win32":
             try:
                 asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            except Exception:
+            except Exception as e:
+                print(f"[applier] Could not set WindowsProactorEventLoopPolicy: {e}")
                 pass
         try:
             q.put((True, _apply_to_job_sync(job_url, cv_data, pdf_path, li_at,

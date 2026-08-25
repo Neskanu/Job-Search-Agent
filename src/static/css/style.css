@@ -57,10 +57,10 @@ select, input, textarea {
 .cv-header-banner {
   background: var(--theme-accent, #0F766E);
   color: #FFFFFF;
-  padding: 1.75rem 2rem;
+  padding: 2rem 2.5rem;
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
   transition: all 0.25s ease;
 }
 
@@ -106,12 +106,12 @@ select, input, textarea {
   justify-content: space-between;
   border-bottom: 1.5px solid var(--theme-accent, #0F766E);
   padding-bottom: 3px;
-  margin-bottom: 8px;
+  margin-bottom: 9px;
   position: relative;
 }
 
 .sec-title {
-  font-size: 0.8rem !important;
+  font-size: 0.85rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
@@ -168,7 +168,7 @@ select, input, textarea {
 /* Item block indicators */
 .item-block {
   transition: all 0.2s ease !important;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.85rem;
 }
 
 /* 📏 Shorter Line Style (Default) */
@@ -185,7 +185,7 @@ select, input, textarea {
   left: 0;
   top: 4px;
   width: 3.5px;
-  height: 18px; /* Shorter 18px vertical pill line */
+  height: 20px;
   background-color: var(--theme-accent, #0F766E);
   border-radius: 9999px;
   transition: all 0.2s ease;
@@ -214,34 +214,77 @@ select, input, textarea {
   color: var(--theme-accent, #0F766E) !important;
 }
 
-/* 📐 2-Column Sidebar Grid Layout */
+/* 📐 2-Column Sidebar Grid Layout with full page height */
 .cv-2col-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  min-height: 900px;
+  grid-template-columns: 270px 1fr;
+  min-height: 960px;
+  flex: 1;
 }
 .cv-2col-sidebar {
   background-color: #F8FAFC;
-  border-right: 1px solid #E2E8F0;
-  padding: 1.5rem 1.25rem;
+  border-right: 1.5px solid #E2E8F0;
+  padding: 1.75rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
+  overflow: hidden;
+  height: 100%;
 }
 .cv-2col-main {
-  padding: 1.5rem 2rem;
+  padding: 1.75rem 2.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
+}
+
+/* Sidebar Item Header & Badge clean wrapping */
+.cv-2col-sidebar .item-header {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 2px !important;
+}
+.cv-2col-sidebar .item-titles {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 1px !important;
+}
+.cv-2col-sidebar .item-badge-wrapper {
+  margin-top: 3px;
+  max-width: 100%;
+}
+.cv-2col-sidebar .item-badge-wrapper > div {
+  white-space: normal !important;
+  word-break: break-word !important;
 }
 
 /* 📄 1-Column Layout */
 .cv-1col-layout {
-  padding: 1.75rem 2rem;
+  padding: 2rem 2.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
+
+/* 📄 Fit to 1 Page compact scaling rules */
+.fit-one-page .cv-header-banner { padding: 1.35rem 2.25rem !important; gap: 1.25rem !important; }
+.fit-one-page .cv-photo-frame { width: 64px !important; height: 64px !important; }
+.fit-one-page .cv-2col-layout { min-height: calc(297mm - 110px) !important; height: 100% !important; }
+.fit-one-page .cv-2col-sidebar { padding: 1.15rem 1.15rem !important; gap: 0.95rem !important; min-height: 100% !important; height: 100% !important; }
+.fit-one-page .cv-2col-main { padding: 1.15rem 1.65rem !important; gap: 1rem !important; }
+.fit-one-page .sec-header { margin-bottom: 6px !important; padding-bottom: 2.5px !important; }
+.fit-one-page .sec-title { font-size: 0.76rem !important; letter-spacing: 0.05em !important; }
+.fit-one-page .text-sec { font-size: 0.76rem !important; line-height: 1.52 !important; letter-spacing: 0.005em !important; }
+.fit-one-page .item-block { margin-bottom: 0.65rem !important; padding-left: 0.65rem !important; }
+.fit-one-page .item-block::before, .fit-one-page .sec-content[contenteditable="true"]::before { height: 16px !important; top: 2px !important; }
+.fit-one-page .item-title { font-size: 0.78rem !important; }
+.fit-one-page .item-sub-title { font-size: 0.74rem !important; }
+.fit-one-page .item-badge-wrapper > div { font-size: 0.65rem !important; padding: 1.5px 6px !important; }
+.fit-one-page .skill-item-text { font-size: 0.74rem !important; line-height: 1.35 !important; letter-spacing: 0.005em !important; }
+.fit-one-page .bullet-marker { font-size: 0.72rem !important; }
+.fit-one-page .bullet-item { margin: 0 !important; gap: 5px !important; }
+.fit-one-page .bullet-text { font-size: 0.74rem !important; line-height: 1.48 !important; letter-spacing: 0.005em !important; }
+.fit-one-page .bullets-container { margin-top: 3px !important; gap: 1.5px !important; }
 
 /* Skills list styling */
 .skill-item-text {

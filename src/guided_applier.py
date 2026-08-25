@@ -24,12 +24,14 @@ import string
 import base64
 import difflib
 import threading
+import urllib.parse
 from datetime import datetime
 from queue import Queue
 from typing import Any, Dict, List, Optional, Tuple
 
 from playwright.sync_api import sync_playwright, Page, Browser
 from PIL import Image, ImageDraw
+from src.browser_manager import create_browser_context, prepare_linkedin_cookies, cleanup_profile_locks, ensure_linkedin_session
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +44,21 @@ SESSIONS_DIR = os.path.join("data", "portal_sessions")
 # Active runtime session store for API status polling
 ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 ACTIVE_SESSIONS_LOCK = threading.Lock()
+
+
+def log_action(session_id: str, msg: str) -> None:
+    """Log real-time action timestamp into active session store."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    entry = f"[{ts}] {msg}"
+    print(f"[guided_applier] {entry}")
+    with ACTIVE_SESSIONS_LOCK:
+        if session_id in ACTIVE_SESSIONS:
+            if "logs" not in ACTIVE_SESSIONS[session_id]:
+                ACTIVE_SESSIONS[session_id]["logs"] = []
+            ACTIVE_SESSIONS[session_id]["logs"].append(entry)
+            if len(ACTIVE_SESSIONS[session_id]["logs"]) > 50:
+                ACTIVE_SESSIONS[session_id]["logs"] = ACTIVE_SESSIONS[session_id]["logs"][-50:]
+            ACTIVE_SESSIONS[session_id]["last_action"] = msg
 
 
 # ---------------------------------------------------------------------------
@@ -102,11 +119,12 @@ def save_answers_memory(memory: Dict[str, str], path: str = MEMORY_FILE_PATH) ->
         print(f"[guided_applier] Error saving memory file {path}: {e}")
 
 
-def fuzzy_lookup(label: str, memory: Dict[str, str], threshold: float = 0.75) -> Tuple[Optional[str], float]:
+def fuzzy_lookup(label: str, memory: Dict[str, str], threshold: float = 0.85) -> Tuple[Optional[str], float]:
     """
     Find best matching answer in memory using a combination of difflib SequenceMatcher
     and token set similarity on normalized label strings.
-    Returns (answer, match_score) or (None, best_score).
+    Returns (answer, match_score) or (None, best_score). Higher 0.85 threshold prevents
+    false matches between sponsorship and work authorization questions.
     """
     norm_target = normalize_label(label)
     if not norm_target or not memory:
@@ -117,7 +135,7 @@ def fuzzy_lookup(label: str, memory: Dict[str, str], threshold: float = 0.75) ->
     best_value = None
 
     for raw_key, value in memory.items():
-        if not value:
+        if not value or raw_key == "workday_password":
             continue
         norm_key = normalize_label(raw_key)
         if not norm_key:
@@ -166,8 +184,74 @@ def generate_secure_password(length: int = 14) -> str:
 # Page Overlay & Visual Highlighting Helpers
 # ---------------------------------------------------------------------------
 
-def inject_overlay(page: Page, message: str, step: int = 1, total_steps: int = 1) -> None:
+def is_target_closed_error(e: Exception) -> bool:
+    """Check if exception is caused by target page, context, browser being closed, or navigation context destruction."""
+    if not e:
+        return False
+    msg = str(e).lower()
+    closed_keywords = (
+        "target page, context or browser has been closed",
+        "target closed",
+        "browser has been closed",
+        "context has been closed",
+        "page has been closed",
+        "has been closed",
+        "connection closed",
+        "execution context was destroyed",
+        "most likely because of a navigation"
+    )
+    return any(k in msg for k in closed_keywords)
+
+
+def get_active_page(context, current_page: Optional[Page] = None, prefer_latest: bool = True) -> Optional[Page]:
+    """
+    Safely get an active non-closed Page object from context or current_page.
+    If prefer_latest is True and context has multiple open pages, returns context.pages[-1].
+    Returns None if browser context or all pages are closed.
+    """
+    if context:
+        try:
+            pages = context.pages
+            open_pages = [p for p in pages if not p.is_closed()]
+            if open_pages:
+                if prefer_latest and len(open_pages) > 1:
+                    return open_pages[-1]
+                if current_page:
+                    try:
+                        if not current_page.is_closed():
+                            return current_page
+                    except Exception as e:
+                        print(f"[guided_applier] Note checking current_page closed state in get_active_page: {e}")
+                        pass
+                return open_pages[-1]
+        except Exception as e:
+            print(f"[guided_applier] Note accessing context.pages in get_active_page: {e}")
+            pass
+
+    if current_page:
+        try:
+            if not current_page.is_closed():
+                return current_page
+        except Exception as e:
+            print(f"[guided_applier] Note checking current_page closed state: {e}")
+            pass
+
+    return None
+
+
+def inject_overlay(page: Optional[Page], message: str, step: int = 1, total_steps: int = 1) -> None:
     """Inject floating overlay control panel into live Chromium page DOM."""
+    if not page:
+        return
+    try:
+        if page.is_closed():
+            return
+    except Exception as e:
+        print(f"[guided_applier] Note checking page.is_closed in inject_overlay: {e}")
+        return
+
+    safe_msg = message.replace('"', '\\"').replace('\n', ' ')
+
     js_code = f"""
     (() => {{
         let overlay = document.getElementById('__agy_overlay__');
@@ -178,52 +262,69 @@ def inject_overlay(page: Page, message: str, step: int = 1, total_steps: int = 1
                 position: fixed;
                 top: 16px;
                 right: 16px;
-                z-index: 9999999;
-                background: rgba(15, 23, 42, 0.92);
-                backdrop-filter: blur(8px);
-                border: 1px solid #334155;
+                z-index: 2147483647;
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                color: #f8fafc;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-size: 13px;
+                padding: 12px 16px;
                 border-radius: 12px;
-                padding: 14px 18px;
-                color: #F8FAFC;
-                font-family: system-ui, -apple-system, sans-serif;
-                font-size: 12px;
-                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.15);
                 max-width: 340px;
-                pointer-events: auto;
+                line-height: 1.5;
+                pointer-events: none;
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             `;
             document.body.appendChild(overlay);
         }}
         overlay.innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid #334155; padding-bottom:6px;">
-                <span style="font-weight:700; color:#FB7185;">🤖 CV Agent Assistant</span>
-                <span style="font-size:10px; background:#475569; padding:2px 6px; border-radius:4px;">Step ${{step}}/${{total_steps}}</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="display:inline-block;width:8px;height:8px;background:#38bdf8;border-radius:50%;box-shadow:0 0 8px #38bdf8;"></span>
+                <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#94a3b8;">Job Search Agent</strong>
+                <span style="margin-left:auto;background:rgba(56,189,248,0.2);color:#38bdf8;font-size:11px;font-weight:600;padding:2px 6px;border-radius:6px;">Step {step}/{total_steps}</span>
             </div>
-            <div id="__agy_msg__" style="color:#CBD5E1; line-height:1.4; margin-bottom:8px;">${{message}}</div>
-            <div style="font-size:10px; color:#94A3B8; italic">Listening for instructions from main app console...</div>
+            <div style="font-weight:500;color:#f1f5f9;">{safe_msg}</div>
         `;
     }})();
     """
     try:
         page.evaluate(js_code)
     except Exception as e:
-        print(f"[guided_applier] Warning injecting overlay: {e}")
+        if not is_target_closed_error(e):
+            print(f"[guided_applier] Warning injecting overlay: {e}")
 
 
-def update_overlay_message(page: Page, message: str, step: int = 1, total_steps: int = 1) -> None:
-    """Update message in existing page overlay."""
-    inject_overlay(page, message, step, total_steps)
-
-
-def highlight_element_and_screenshot(page: Page, selector_or_element, audit_dir: str, filename_base: str) -> Tuple[str, str]:
+def highlight_element_and_screenshot(
+    page: Optional[Page],
+    selector_or_element: Any,
+    audit_dir: str,
+    filename_base: str
+) -> Tuple[str, str]:
     """
     Take screenshot of current page, draw a red 4px rectangle around element's bounding box using PIL,
     and save image. Returns (file_path, base64_data_url).
     """
+    if not page:
+        return ("", "")
+    try:
+        if page.is_closed():
+            return ("", "")
+    except Exception as e:
+        print(f"[guided_applier] Note checking page.is_closed in highlight_element_and_screenshot: {e}")
+        return ("", "")
+
     os.makedirs(audit_dir, exist_ok=True)
     raw_path = os.path.join(audit_dir, f"{filename_base}_raw.png")
     out_path = os.path.join(audit_dir, f"{filename_base}.png")
 
-    page.screenshot(path=raw_path, full_page=False)
+    try:
+        page.screenshot(path=raw_path, full_page=False)
+    except Exception as s_err:
+        if is_target_closed_error(s_err):
+            return ("", "")
+        print(f"[guided_applier] Screenshot warning: {s_err}")
+        return ("", "")
 
     box = None
     try:
@@ -234,7 +335,8 @@ def highlight_element_and_screenshot(page: Page, selector_or_element, audit_dir:
         elif hasattr(selector_or_element, "bounding_box"):
             box = selector_or_element.bounding_box()
     except Exception as err:
-        print(f"[guided_applier] Could not get bounding box for highlight: {err}")
+        if not is_target_closed_error(err):
+            print(f"[guided_applier] Could not get bounding box for highlight: {err}")
 
     # Process image with PIL
     try:
@@ -258,8 +360,12 @@ def highlight_element_and_screenshot(page: Page, selector_or_element, audit_dir:
         out_path = raw_path
 
     # Convert out_path to base64
-    with open(out_path, "rb") as f:
-        b64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+    try:
+        with open(out_path, "rb") as f:
+            b64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+    except Exception as e:
+        print(f"[guided_applier] Failed to convert screenshot to base64 ({out_path}): {e}")
+        b64 = ""
 
     return out_path, b64
 
@@ -346,66 +452,82 @@ def handle_workday_auth(page: Page, cv_data: Dict[str, Any], memory: Dict[str, s
     Creates account using candidate email + generated password if 'Create Account' is detected.
     Returns True if an auth action was executed.
     """
-    # Look for Workday Create Account button/link
-    create_acct_btn = page.query_selector(
-        "[data-automation-id='createAccountButton'], "
-        "button:has-text('Create Account'), "
-        "a:has-text('Create Account')"
-    )
+    if not page:
+        return False
+    try:
+        if page.is_closed():
+            return False
+    except Exception as e:
+        print(f"[guided_applier] Note checking page.is_closed in handle_workday_auth: {e}")
+        return False
 
-    if create_acct_btn and create_acct_btn.is_visible():
-        print("[guided_applier] Workday 'Create Account' button detected. Executing auto-registration...")
-        create_acct_btn.click()
-        time.sleep(2.0)
+    try:
+        # Look for Workday Create Account button/link
+        create_acct_btn = page.query_selector(
+            "[data-automation-id='createAccountButton'], "
+            "button:has-text('Create Account'), "
+            "a:has-text('Create Account')"
+        )
 
-        # Get or generate Workday password
-        email = memory.get("email address") or cv_data.get("name", "").replace(" ", ".").lower() + "@example.com"
-        pwd = memory.get("workday_password") or generate_secure_password()
-        memory["workday_password"] = pwd
-        save_answers_memory(memory)
+        if create_acct_btn and create_acct_btn.is_visible():
+            print("[guided_applier] Workday 'Create Account' button detected. Executing auto-registration...")
+            create_acct_btn.click()
+            time.sleep(2.0)
 
-        # Fill registration inputs
-        email_input = page.query_selector("[data-automation-id='email'], input[type='email']")
-        pwd_input = page.query_selector("[data-automation-id='password'], input[type='password']")
-        verify_pwd_input = page.query_selector("[data-automation-id='confirmPassword']")
+            # Get candidate email cleanly without dummy fallbacks
+            email = memory.get("email address") or derive_from_cv_heuristics("email", cv_data) or cv_data.get("email") or ""
+            if not email:
+                print("[guided_applier] Warning: No candidate email available for Workday account creation.")
+                return False
 
-        if email_input:
-            email_input.fill(email)
-            time.sleep(0.5)
-        if pwd_input:
-            pwd_input.fill(pwd)
-            time.sleep(0.5)
-        if verify_pwd_input:
-            verify_pwd_input.fill(pwd)
-            time.sleep(0.5)
+            # Generate password for session
+            pwd = memory.get("workday_password") or generate_secure_password()
 
-        # Accept terms checkbox if present
-        terms_checkbox = page.query_selector("[data-automation-id='createAccountCheckbox'], input[type='checkbox']")
-        if terms_checkbox and not terms_checkbox.is_checked():
-            terms_checkbox.click()
-            time.sleep(0.5)
+            # Fill registration inputs
+            email_input = page.query_selector("[data-automation-id='email'], input[type='email']")
+            pwd_input = page.query_selector("[data-automation-id='password'], input[type='password']")
+            verify_pwd_input = page.query_selector("[data-automation-id='confirmPassword']")
 
-        # Click Create Account Submit
-        submit_reg = page.query_selector("[data-automation-id='createAccountSubmitButton'], button:has-text('Create Account')")
-        if submit_reg:
-            submit_reg.click()
-            time.sleep(3.0)
-            print("[guided_applier] Workday account created successfully.")
-            return True
+            if email_input:
+                email_input.fill(email)
+                time.sleep(0.5)
+            if pwd_input:
+                pwd_input.fill(pwd)
+                time.sleep(0.5)
+            if verify_pwd_input:
+                verify_pwd_input.fill(pwd)
+                time.sleep(0.5)
 
-    # Check for Sign In
-    signin_btn = page.query_selector("[data-automation-id='signInSubmitButton']")
-    if signin_btn and signin_btn.is_visible():
-        email = memory.get("email address") or ""
-        pwd = memory.get("workday_password") or ""
-        if email and pwd:
-            email_input = page.query_selector("[data-automation-id='email']")
-            pwd_input = page.query_selector("[data-automation-id='password']")
-            if email_input: email_input.fill(email)
-            if pwd_input: pwd_input.fill(pwd)
-            signin_btn.click()
-            time.sleep(3.0)
-            return True
+            # Accept terms checkbox if present
+            terms_checkbox = page.query_selector("[data-automation-id='createAccountCheckbox'], input[type='checkbox']")
+            if terms_checkbox and not terms_checkbox.is_checked():
+                terms_checkbox.click()
+                time.sleep(0.5)
+
+            # Click Create Account Submit
+            submit_reg = page.query_selector("[data-automation-id='createAccountSubmitButton'], button:has-text('Create Account')")
+            if submit_reg:
+                submit_reg.click()
+                time.sleep(3.0)
+                print("[guided_applier] Workday account created successfully.")
+                return True
+
+        # Check for Sign In
+        signin_btn = page.query_selector("[data-automation-id='signInSubmitButton']")
+        if signin_btn and signin_btn.is_visible():
+            email = memory.get("email address") or derive_from_cv_heuristics("email", cv_data) or ""
+            pwd = memory.get("workday_password") or ""
+            if email and pwd:
+                email_input = page.query_selector("[data-automation-id='email']")
+                pwd_input = page.query_selector("[data-automation-id='password']")
+                if email_input: email_input.fill(email)
+                if pwd_input: pwd_input.fill(pwd)
+                signin_btn.click()
+                time.sleep(3.0)
+                return True
+    except Exception as e:
+        if not is_target_closed_error(e):
+            print(f"[guided_applier] Workday auth note: {e}")
 
     return False
 
@@ -462,7 +584,8 @@ def extract_field_label(group) -> str:
             cleaned = re.sub(r'[\*\:]+$', '', nearby_text.strip()).strip()
             if cleaned and not is_uuid_or_random_id(cleaned):
                 return cleaned
-    except Exception:
+    except Exception as e:
+        print(f"[guided_applier] Note evaluating nearby DOM text in extract_field_label: {e}")
         pass
 
     # 2. Check attributes, filtering out UUIDs
@@ -490,12 +613,16 @@ def derive_from_cv_heuristics(label: str, cv_data: Dict[str, Any]) -> Optional[s
     # Email
     if "email" in norm:
         match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", contact_str)
-        return match.group(0) if match else None
+        if match:
+            return match.group(0)
+        return cv_data.get("email") or None
 
     # Phone
     if "phone" in norm or "mobile" in norm or "telephone" in norm:
         match = re.search(r"[\+\d][\d\s\-\(\)]{6,}", contact_str)
-        return match.group(0).strip() if match else None
+        if match:
+            return match.group(0).strip()
+        return cv_data.get("phone") or None
 
     # First Name
     if "first name" in norm or "given name" in norm:
@@ -509,15 +636,19 @@ def derive_from_cv_heuristics(label: str, cv_data: Dict[str, Any]) -> Optional[s
     if norm in ("name", "full name", "your name"):
         return full_name
 
-    # LinkedIn
+    # LinkedIn Profile URL (Return None if missing — NEVER fallback to generic homepage!)
     if "linkedin" in norm:
         match = re.search(r"https?://[^\s]*linkedin[^\s]*", contact_str)
-        return match.group(0) if match else "https://linkedin.com"
+        if match:
+            return match.group(0)
+        return cv_data.get("linkedin") or cv_data.get("linkedin_url") or None
 
-    # City / Location
+    # City / Location (support US & International formats e.g. Vilnius, Lithuania; London, UK)
     if "city" in norm or "location" in norm:
-        match = re.search(r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)*,\s*[A-Z]{2,})", contact_str)
-        return match.group(0) if match else None
+        match = re.search(r"([A-Z][a-zA-Z\s.-]+,\s*[A-Z][a-zA-Z\s.-]+)", contact_str)
+        if match:
+            return match.group(0)
+        return cv_data.get("location") or cv_data.get("city") or None
 
     return None
 
@@ -527,6 +658,10 @@ def try_apply_with_linkedin(page: Page, context) -> bool:
     Search for and click 'Apply with LinkedIn' or 'Autofill with LinkedIn' buttons
     on company portals to automatically pre-fill candidate data using logged in LinkedIn session.
     """
+    active_page = get_active_page(context, page)
+    if not active_page:
+        return False
+
     selectors = [
         "button:has-text('Apply with LinkedIn')",
         "a:has-text('Apply with LinkedIn')",
@@ -541,15 +676,18 @@ def try_apply_with_linkedin(page: Page, context) -> bool:
 
     for sel in selectors:
         try:
-            btn = page.query_selector(sel)
+            active_page = get_active_page(context, active_page)
+            if not active_page:
+                return False
+            btn = active_page.query_selector(sel)
             if btn and btn.is_visible():
                 print(f"[guided_applier] Detected 'Apply with LinkedIn' button ({sel}). Executing click...")
-                inject_overlay(page, "Clicking 'Apply with LinkedIn' to auto-fill details...", 1, 4)
-                pages_before = len(context.pages)
+                inject_overlay(active_page, "Clicking 'Apply with LinkedIn' to auto-fill details...", 1, 4)
+                pages_before = len(context.pages) if context else 0
                 btn.click()
                 time.sleep(3.0)
 
-                if len(context.pages) > pages_before:
+                if context and len(context.pages) > pages_before:
                     popup = context.pages[-1]
                     print(f"[guided_applier] LinkedIn OAuth popup detected: {popup.url}")
                     popup.wait_for_load_state("domcontentloaded", timeout=15000)
@@ -562,7 +700,8 @@ def try_apply_with_linkedin(page: Page, context) -> bool:
 
                 return True
         except Exception as e:
-            print(f"[guided_applier] 'Apply with LinkedIn' note: {e}")
+            if not is_target_closed_error(e):
+                print(f"[guided_applier] 'Apply with LinkedIn' note: {e}")
 
     return False
 
@@ -578,7 +717,8 @@ def is_search_or_nav_field(el, label: str) -> bool:
         box = el.bounding_box()
         if box and (box.get("width", 0) < 15 or box.get("height", 0) < 15):
             return True
-    except Exception:
+    except Exception as e:
+        print(f"[guided_applier] Note checking bounding box in is_search_or_nav_field: {e}")
         pass
 
     try:
@@ -594,7 +734,8 @@ def is_search_or_nav_field(el, label: str) -> bool:
             }""")
             if isinstance(is_in_nav, bool) and is_in_nav:
                 return True
-        except Exception:
+        except Exception as e:
+            print(f"[guided_applier] Note evaluating is_in_nav in is_search_or_nav_field: {e}")
             pass
 
         for attr in ["name", "id", "placeholder", "aria-label", "class"]:
@@ -607,7 +748,8 @@ def is_search_or_nav_field(el, label: str) -> bool:
             opt_texts = [o.inner_text().strip().lower() for o in el.query_selector_all("option")[:5]]
             if any(lang in opt for opt in opt_texts for lang in ["arabic", "english", "lithuanian", "lietuvių", "deutsch", "español", "francais"]):
                 return True
-    except Exception:
+    except Exception as e:
+        print(f"[guided_applier] Note checking attributes in is_search_or_nav_field: {e}")
         pass
 
     return False
@@ -617,112 +759,142 @@ def fill_element_robustly(el, value: str) -> None:
     """
     Fill input element robustly by focusing, setting value, dispatching input & change events,
     and blurring so React/Angular/Vue reactive forms persist the typed value without clearing it.
+    Matches dropdown <select> options against both value and visible text.
     """
-    val_str = str(value)
+    val_str = str(value).strip()
     try:
         tag = el.evaluate("el => el.tagName.toLowerCase()")
         el_type = (el.get_attribute("type") or "").lower()
 
         if tag == "select":
-            try: el.select_option(value=val_str)
-            except Exception: el.select_option(label=val_str)
+            # Match options by value or visible text
+            options_info = el.evaluate("""sel => {
+                return Array.from(sel.options).map((o, idx) => ({
+                    index: idx,
+                    value: o.value,
+                    text: o.innerText.trim()
+                }));
+            }""")
+            matched_val = None
+            for opt in options_info:
+                if val_str.lower() == opt["value"].lower() or val_str.lower() == opt["text"].lower():
+                    matched_val = opt["value"]
+                    break
+            if not matched_val:
+                for opt in options_info:
+                    if val_str.lower() in opt["text"].lower() or opt["text"].lower() in val_str.lower():
+                        matched_val = opt["value"]
+                        break
+            if matched_val:
+                el.select_option(value=matched_val)
+            else:
+                try:
+                    el.select_option(value=val_str)
+                except Exception as e_val:
+                    try:
+                        el.select_option(label=val_str)
+                    except Exception as e_lbl:
+                        print(f"[guided_applier] Failed to select option by value ({e_val}) and label ({e_lbl}) for '{val_str}'")
+                        pass
+
         elif el_type in ("checkbox", "radio"):
-            if val_str.lower() in ("yes", "true", "1") and not el.is_checked():
+            is_affirmative = val_str.lower() in ("yes", "true", "1")
+            is_negative = val_str.lower() in ("no", "false", "0")
+            if is_affirmative and not el.is_checked():
+                el.click()
+            elif is_negative and el.is_checked():
                 el.click()
         else:
             el.focus()
-            el.fill("")
-            time.sleep(0.1)
             el.fill(val_str)
-            el.dispatch_event("input")
-            el.dispatch_event("change")
+            el.evaluate("""el => {
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }""")
             el.blur()
-    except Exception as e:
-        print(f"[guided_applier] Fill warning, fallback to direct fill: {e}")
+    except Exception as err:
+        print(f"[guided_applier] Fill note for '{value}': {err}")
         try:
             el.fill(val_str)
-        except Exception:
+        except Exception as fallback_err:
+            print(f"[guided_applier] Fallback fill failed for '{val_str}': {fallback_err}")
             pass
 
 
-def create_browser_context(pw, user_data_dir: str):
+
+def safe_goto(
+    page: Page,
+    url: str,
+    timeout: int = 35000,
+    session_id: str = ""
+) -> bool:
     """
-    Safely launch persistent Chromium context with stealth parameters to prevent blank page blocking on LinkedIn.
-    Cleans stale lock files and falls back to standard chromium launch if persistent launch fails.
-    """
-    for root, _, files in os.walk(user_data_dir):
-        for f in files:
-            if f.lower() in ("lockfile", "lock", "singletonlock", "singletoncookie"):
-                try:
-                    os.remove(os.path.join(root, f))
-                except Exception:
-                    pass
-
-    stealth_args = [
-        "--start-maximized",
-        "--disable-blink-features=AutomationControlled",
-        "--no-sandbox",
-        "--disable-setuid-sandbox"
-    ]
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-
-    try:
-        ctx = pw.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=False,
-            args=stealth_args,
-            no_viewport=True,
-            user_agent=ua
-        )
-    except Exception as err:
-        print(f"[guided_applier] Persistent context launch note ({err}), falling back to standard launch...")
-        browser = pw.chromium.launch(headless=False, args=stealth_args)
-        ctx = browser.new_context(viewport={"width": 1280, "height": 900}, user_agent=ua)
-
-    # Inject stealth script to mask navigator.webdriver bot detection
-    try:
-        ctx.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.navigator.chrome = { runtime: {} };
-        """)
-    except Exception:
-        pass
-
-    return ctx
-
-
-def safe_goto(page: Page, url: str, timeout: int = 35000) -> bool:
-    """
-    Safely navigate page to URL. Handles redirect loops (ERR_TOO_MANY_REDIRECTS)
-    by clearing stale/corrupt cookies and retrying cleanly.
+    Safely navigate to a URL.
+    Important:
+    - Does NOT retry redirect loops.
+    - Returns False for chrome-error:// and about:blank.
+    - Logs final URL, HTTP status, and navigation exceptions.
     """
     if not url or not url.startswith("http"):
-        print(f"[guided_applier] Invalid portal URL provided: {url}")
+        if session_id:
+            log_action(session_id, f"Invalid portal URL: {url}")
+        else:
+            print(f"[guided_applier] Invalid portal URL: {url}")
         return False
 
     try:
-        print(f"[guided_applier] Executing page.goto -> {url}")
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-        return True
-    except Exception as e:
-        err_text = str(e)
-        print(f"[guided_applier] safe_goto note for {url}: {err_text}")
-        if "ERR_TOO_MANY_REDIRECTS" in err_text or "too many redirects" in err_text.lower():
-            try:
-                print("[guided_applier] ERR_TOO_MANY_REDIRECTS detected. Clearing context cookies and retrying...")
-                page.context.clear_cookies()
-                time.sleep(1.0)
-                page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-                return True
-            except Exception as retry_err:
-                print(f"[guided_applier] Retry safe_goto warning: {retry_err}")
+        if session_id:
+            log_action(session_id, f"Navigating to {url}")
         else:
-            try:
-                page.goto(url, wait_until="load", timeout=timeout)
-                return True
-            except Exception:
-                pass
-    return False
+            print(f"[guided_applier] Navigating to {url}")
+
+        response = page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=timeout
+        )
+
+        final_url = page.url
+
+        if final_url.startswith("chrome-error://"):
+            msg = f"Chromium navigation error page: {final_url}"
+            if session_id: log_action(session_id, msg)
+            else: print(f"[guided_applier] {msg}")
+            return False
+
+        if final_url == "about:blank":
+            msg = "Navigation resulted in about:blank"
+            if session_id: log_action(session_id, msg)
+            else: print(f"[guided_applier] {msg}")
+            return False
+
+        if response:
+            msg = f"Navigation completed: HTTP {response.status} -> {final_url}"
+            if session_id: log_action(session_id, msg)
+            else: print(f"[guided_applier] {msg}")
+        else:
+            msg = f"Navigation completed without response object: {final_url}"
+            if session_id: log_action(session_id, msg)
+            else: print(f"[guided_applier] {msg}")
+
+        return True
+
+    except Exception as e:
+        error_text = str(e)
+        msg = f"Navigation failed: {error_text}"
+        if session_id: log_action(session_id, msg)
+        else: print(f"[guided_applier] {msg}")
+
+        if any(term in error_text.lower() for term in (
+            "too many redirects",
+            "err_too_many_redirects",
+            "redirect loop",
+        )):
+            loop_msg = "Redirect loop detected. Navigation will NOT be retried."
+            if session_id: log_action(session_id, loop_msg)
+            else: print(f"[guided_applier] {loop_msg}")
+
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +917,7 @@ def run_guided_apply_session(
     audit_dir = os.path.join("data", "applications", f"{company}_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}")
     os.makedirs(audit_dir, exist_ok=True)
 
+    TOTAL_STEPS = 5
     filled_fields: Dict[str, Any] = {}
     screenshots: List[str] = []
 
@@ -756,15 +929,16 @@ def run_guided_apply_session(
             "portal_url": portal_url,
             "status": "running",
             "current_step": 1,
-            "total_steps": 4,
+            "total_steps": TOTAL_STEPS,
             "last_action": "Launching Chromium browser...",
             "paused_field": None,
             "filled_fields": filled_fields,
             "screenshots": screenshots,
-            "audit_dir": audit_dir
+            "audit_dir": audit_dir,
+            "logs": []
         }
 
-    save_session(company, portal_url, 1, 4, filled_fields, "running", session_id=session_id)
+    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "running", session_id=session_id)
 
     # Fallback li_at cookie from memory if not provided in request
     cookie_val = (li_at or "").strip().strip('"').strip("'")
@@ -782,108 +956,211 @@ def run_guided_apply_session(
         with sync_playwright() as pw:
             context = create_browser_context(pw, user_data_dir)
 
-            # Only inject li_at cookie if NOT navigating directly to a public LinkedIn job post
-            # (Injecting partial li_at on public LinkedIn job view URLs triggers an infinite 302 redirect loop)
-            if cookie_val and cookie_val.lower() not in ("none", "null", "undefined") and "linkedin.com/jobs" not in portal_url.lower():
-                try:
-                    context.add_cookies([{
-                        "name": "li_at", "value": cookie_val, "domain": ".linkedin.com",
-                        "path": "/", "expires": time.time() + 3600*24*30, "httpOnly": True, "secure": True
-                    }])
-                except Exception as c_err:
-                    print(f"[guided_applier] Warning adding cookie: {c_err}")
+            # Perform main domain handshake if target URL is LinkedIn to establish full session state
+            if "linkedin.com" in portal_url.lower():
+                ensure_linkedin_session(context, cookie_val, lambda msg: log_action(session_id, msg))
 
-            page = context.pages[0] if context.pages else context.new_page()
+            page = get_active_page(context)
+            if not page:
+                page = context.new_page()
+
+            # Dynamically track newly opened tabs (e.g. ATS redirects)
+            try:
+                context.on("page", lambda p: log_action(session_id, f"New tab event: {p.url}"))
+            except Exception as e:
+                print(f"[guided_applier] Failed to register tab event listener: {e}")
+                pass
 
             try:
-                print(f"[guided_applier] Navigating directly to {portal_url}")
-                ok = safe_goto(page, portal_url)
-                if not ok or page.url == "about:blank":
-                    print("[guided_applier] Page still on about:blank after safe_goto, forcing page.goto...")
-                    try:
-                        page.goto(portal_url, wait_until="load", timeout=30000)
-                    except Exception as force_err:
-                        print(f"[guided_applier] Force goto note: {force_err}")
+                log_action(session_id, f"Navigating to {portal_url}...")
+                ok = safe_goto(page, portal_url, session_id=session_id)
+                page = get_active_page(context, page)
+                if not page:
+                    log_action(session_id, "Target page or browser closed during initial navigation.")
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window or tab closed."
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                    return
 
+                if not ok:
+                    current_url = page.url if page else "unknown"
+                    log_action(session_id, f"Initial navigation failed. Current URL: {current_url}")
+
+                    if "linkedin.com" in portal_url.lower():
+                        log_action(
+                            session_id,
+                            "LinkedIn navigation failed. "
+                            "This is likely an authentication/cookie/profile problem. "
+                            "Stopping instead of retrying the redirect loop."
+                        )
+
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "failed"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = f"Navigation failed: {current_url}"
+
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "failed", session_id=session_id)
+                    return
+
+                log_action(session_id, f"Page loaded: {page.url}")
                 time.sleep(2.5)
+
+                page = get_active_page(context, page)
+                if not page:
+                    log_action(session_id, "Target page or browser closed after initial load.")
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window or tab closed."
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                    return
 
                 # Check if page rendered blank white and reload if needed
                 try:
                     body_text = page.locator("body").inner_text().strip()
                     if not body_text:
-                        print("[guided_applier] Blank page detected. Reloading page...")
+                        log_action(session_id, "Blank page detected. Reloading page...")
                         page.reload(wait_until="domcontentloaded", timeout=20000)
                         time.sleep(2.0)
-                except Exception:
+                except Exception as e:
+                    print(f"[guided_applier] Note while checking blank page body / reload: {e}")
                     pass
 
+                page = get_active_page(context, page)
+                if not page:
+                    log_action(session_id, "Target page or browser closed.")
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window or tab closed."
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                    return
+
+                curr_url = page.url.lower()
+                if any(k in curr_url for k in ["linkedin.com/signup", "linkedin.com/login", "linkedin.com/uas", "linkedin.com/checkpoint"]):
+                    log_action(session_id, f"LinkedIn authentication page detected ({page.url}). li_at cookie may be expired.")
+
                 # If portal_url is a LinkedIn job post, click Apply link smoothly
-                if "linkedin.com/jobs" in page.url.lower():
-                    print("[guided_applier] LinkedIn job page detected. Dismissing overlays & finding Apply button...")
-                    inject_overlay(page, "Locating Apply link on LinkedIn page...", 1, 4)
+                if page and any(k in page.url.lower() for k in ["linkedin.com/jobs", "linkedin.com/signup", "linkedin.com/login", "linkedin.com/uas", "linkedin.com/checkpoint"]):
+                    log_action(session_id, "LinkedIn job/auth page detected. Dismissing overlays & finding Apply button...")
+                    inject_overlay(page, "Locating Apply link on LinkedIn page...", 1, TOTAL_STEPS)
 
                     # 1. Dismiss sign-in/cookie overlays if present
                     try:
-                        dismiss_btns = page.query_selector_all("button.modal__dismiss, button[aria-label='Dismiss'], button[aria-label='Close'], button.contextual-sign-in-modal__modal-dismiss")
-                        for d in dismiss_btns:
-                            if d.is_visible():
-                                try: d.click(force=True)
-                                except Exception: pass
-                    except Exception:
-                        pass
+                        page = get_active_page(context, page)
+                        if page:
+                            dismiss_btns = page.query_selector_all("button.modal__dismiss, button[aria-label='Dismiss'], button[aria-label='Close'], button.contextual-sign-in-modal__modal-dismiss")
+                            for d in dismiss_btns:
+                                try:
+                                    if d.is_visible(): d.click(force=True)
+                                except Exception as d_err:
+                                    print(f"[guided_applier] Note dismissing modal button: {d_err}")
+                                    pass
+                    except Exception as dis_err:
+                        if is_target_closed_error(dis_err):
+                            page = get_active_page(context, page)
 
-                    # 2. Locate the first VISIBLE Apply element
+                    # 2. Locate the first VISIBLE Apply element with targeted selectors
                     apply_selectors = [
                         "button.jobs-apply-button",
                         "a.jobs-apply-button",
-                        "button.apply-button",
-                        ".top-card-layout__cta",
-                        "a[href*='apply']",
-                        "button:has-text('Apply')",
-                        "a:has-text('Apply')",
                         "button:has-text('Easy Apply')",
-                        "a:has-text('Easy Apply')"
+                        "a:has-text('Easy Apply')",
+                        "button[data-job-id]",
+                        "a[href*='/jobs/apply']",
+                        ".top-card-layout__cta",
+                        "button:has-text('Apply Now')",
+                        "a:has-text('Apply Now')"
                     ]
 
                     visible_apply_btn = None
                     for sel in apply_selectors:
-                        elements = page.query_selector_all(sel)
-                        for el in elements:
-                            try:
-                                if el.is_visible():
-                                    visible_apply_btn = el
-                                    break
-                            except Exception:
-                                pass
-                        if visible_apply_btn:
+                        page = get_active_page(context, page)
+                        if not page:
                             break
+                        try:
+                            elements = page.query_selector_all(sel)
+                            for el in elements:
+                                try:
+                                    if el.is_visible():
+                                        txt = el.inner_text().strip().lower()
+                                        if not any(ign in txt for ign in ["filter", "coupon", "setting"]):
+                                            visible_apply_btn = el
+                                            break
+                                except Exception as el_err:
+                                    print(f"[guided_applier] Note checking apply button candidate: {el_err}")
+                                    pass
+                            if visible_apply_btn:
+                                break
+                        except Exception as sel_err:
+                            if is_target_closed_error(sel_err):
+                                page = get_active_page(context, page)
+                                if not page:
+                                    break
+
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, "Browser closed while scanning LinkedIn page.")
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window or tab closed."
+                        save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                        return
 
                     if visible_apply_btn:
-                        print("[guided_applier] Found visible Apply button. Executing JS click...")
-                        inject_overlay(page, "Clicking Apply link to follow redirect...", 1, 4)
+                        log_action(session_id, "Found visible Apply button. Navigating / clicking link...")
+                        inject_overlay(page, "Clicking Apply link to follow redirect...", 1, TOTAL_STEPS)
                         try:
-                            pages_before = len(context.pages)
+                            target_href = None
                             try:
-                                page.evaluate("el => el.click()", visible_apply_btn)
-                            except Exception:
-                                visible_apply_btn.click(force=True)
+                                target_href = visible_apply_btn.get_attribute("href")
+                            except Exception as h_err:
+                                print(f"[guided_applier] Note reading apply button href: {h_err}")
+                                pass
 
-                            time.sleep(3.0)
+                            if target_href and target_href.strip() and not target_href.startswith("javascript:"):
+                                full_target_url = urllib.parse.urljoin(page.url, target_href)
+                                log_action(session_id, f"Navigating directly via Apply link href -> {full_target_url}")
+                                safe_goto(page, full_target_url)
+                                time.sleep(3.0)
+                            else:
+                                # Robust tab opening expectation
+                                try:
+                                    with context.expect_page(timeout=6000) as page_info:
+                                        visible_apply_btn.click(force=True)
+                                    new_p = page_info.value
+                                    new_p.wait_for_load_state("domcontentloaded", timeout=15000)
+                                    page = new_p
+                                    log_action(session_id, f"Redirected to new tab: {page.url}")
+                                except Exception as exp_err:
+                                    print(f"[guided_applier] Note while waiting for new tab after apply click: {exp_err}")
+                                    time.sleep(3.0)
 
-                            if len(context.pages) > pages_before:
-                                page = context.pages[-1]
-                                page.wait_for_load_state("domcontentloaded", timeout=20000)
-                                print(f"[guided_applier] Redirected to active tab: {page.url}")
+                            page = get_active_page(context, page)
                         except Exception as apply_err:
-                            print(f"[guided_applier] Apply click note: {apply_err}")
+                            log_action(session_id, f"Apply click note: {apply_err}")
                             time.sleep(2.0)
-                            if len(context.pages) > 1:
-                                page = context.pages[-1]
+                            page = get_active_page(context, page)
+
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, "Target page or browser closed after Apply click.")
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window or tab closed."
+                        save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                        return
 
                     # If still on LinkedIn page and no external tab opened, pause for human handholding
                     if "linkedin.com/jobs" in page.url.lower():
-                        screenshot_path, b64 = highlight_element_and_screenshot(page, apply_btn or page.query_selector("body"), audit_dir, "linkedin_handshake")
-                        screenshots.append(screenshot_path)
+                        body_or_btn = visible_apply_btn
+                        try:
+                            if not body_or_btn:
+                                body_or_btn = page.query_selector("body")
+                        except Exception as b_err:
+                            print(f"[guided_applier] Note querying body element: {b_err}")
+                            pass
+                        screenshot_path, b64 = highlight_element_and_screenshot(page, body_or_btn, audit_dir, "linkedin_handshake")
+                        if screenshot_path:
+                            screenshots.append(screenshot_path)
 
                         paused_info = {
                             "label": "Click 'Apply' on LinkedIn page in Chromium",
@@ -898,48 +1175,193 @@ def run_guided_apply_session(
                             ACTIVE_SESSIONS[session_id]["paused_field"] = paused_info
                             ACTIVE_SESSIONS[session_id]["last_action"] = "Paused: Click Apply on LinkedIn window to open application portal."
 
-                        save_session(company, portal_url, 1, 4, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
-                        inject_overlay(page, "👉 Please click the Apply button in Chromium to open external portal, then click Resume →", 1, 4)
+                        save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
+                        inject_overlay(page, "👉 Please click the Apply button in Chromium to open external portal, then click Resume →", 1, TOTAL_STEPS)
 
                         while True:
                             time.sleep(1.0)
+                            page = get_active_page(context, page)
+                            if not page:
+                                log_action(session_id, "Browser closed by user while paused on LinkedIn.")
+                                with ACTIVE_SESSIONS_LOCK:
+                                    ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                                    ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                                save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                                return
+
                             with ACTIVE_SESSIONS_LOCK:
                                 st = ACTIVE_SESSIONS[session_id]["status"]
                             if st in ("running", "cancelled", "completed"):
                                 break
                             if st == "stopped":
-                                context.close()
+                                try:
+                                    context.close()
+                                except Exception as e:
+                                    print(f"[guided_applier] Note closing context on pause stopped: {e}")
+                                    pass
                                 return
 
-                        # If user opened a new tab or redirected, switch to the latest page
-                        if len(context.pages) > 1:
-                            page = context.pages[-1]
+                        page = get_active_page(context, page)
+                        if not page:
+                            log_action(session_id, "Browser closed by user after resume.")
+                            with ACTIVE_SESSIONS_LOCK:
+                                ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                                ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                            save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                            return
+
+                        # Check if an external tab was opened or redirected
+                        if context:
+                            open_pages = [p for p in context.pages if not p.is_closed()]
+                            external_pages = [p for p in open_pages if "linkedin.com/jobs" not in p.url.lower() and p.url != "about:blank"]
+                            if external_pages:
+                                page = external_pages[-1]
+                                log_action(session_id, f"Switched to external application portal: {page.url}")
+
+                # If still on LinkedIn page without external portal redirect, pause rather than falsely completing
+                page = get_active_page(context, page)
+                if page and "linkedin.com/jobs" in page.url.lower():
+                    log_action(session_id, "Still on LinkedIn job post page without external portal redirect. Pausing for portal navigation.")
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "paused"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = "Paused: Click Apply link in browser window to open external application portal."
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "paused", session_id=session_id)
+                    return
 
                 ats_type = detect_ats_platform(page.url)
-                inject_overlay(page, f"Portal loaded ({ats_type.upper()}). Scanning fields...", 1, 4)
+                log_action(session_id, f"Portal loaded ({ats_type.upper()}: {page.url}). Scanning fields...")
+                inject_overlay(page, f"Portal loaded ({ats_type.upper()}). Scanning fields...", 1, TOTAL_STEPS)
 
                 # 1. Always attempt 'Apply with LinkedIn' / 'Autofill with LinkedIn' on external portal
                 try_apply_with_linkedin(page, context)
+                page = get_active_page(context, page)
+                if not page:
+                    log_action(session_id, "Browser closed during Apply with LinkedIn.")
+                    with ACTIVE_SESSIONS_LOCK:
+                        ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                        ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                    save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                    return
 
                 # 2. Check Workday Auth
                 if ats_type == "workday":
                     handle_workday_auth(page, cv_data, memory)
-                    inject_overlay(page, "Workday account check completed. Scanning form...", 1, 4)
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, "Browser closed during Workday auth.")
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                        save_session(company, portal_url, 1, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                        return
+                    inject_overlay(page, "Workday account check completed. Scanning form...", 1, TOTAL_STEPS)
 
                 # Loop through pages / form steps
-                for step in range(1, 6):
+                for step in range(1, TOTAL_STEPS + 1):
+                    log_action(session_id, f"Processing form step {step}/{TOTAL_STEPS}...")
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, f"Browser closed at step {step}.")
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                        save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                        return
+
                     with ACTIVE_SESSIONS_LOCK:
                         ACTIVE_SESSIONS[session_id]["current_step"] = step
                         ACTIVE_SESSIONS[session_id]["last_action"] = f"Processing step {step}..."
 
-                    inject_overlay(page, f"Scanning step {step} inputs...", step, 4)
+                    inject_overlay(page, f"Scanning step {step} inputs...", step, TOTAL_STEPS)
                     time.sleep(1.5)
 
-                    # Check CAPTCHA
-                    captcha_el = page.query_selector("iframe[src*='captcha'], div.g-recaptcha, div.h-captcha, iframe[src*='recaptcha']")
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, f"Browser closed at step {step}.")
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                        save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                        return
+
+                    # Check if page is stuck on a LinkedIn/Workday Login or Sign-Up Wall
+                    is_login_wall = False
+                    try:
+                        curr_url = page.url.lower() if page else ""
+                        if any(k in curr_url for k in ["linkedin.com/signup", "linkedin.com/login", "linkedin.com/uas/login"]):
+                            is_login_wall = True
+                        else:
+                            body_text = page.locator("body").inner_text().lower() if page else ""
+                            if "join linkedin now" in body_text or "sign in to linkedin" in body_text:
+                                is_login_wall = True
+                    except Exception as e:
+                        print(f"[guided_applier] Note while checking login wall status: {e}")
+                        pass
+
+                    if is_login_wall:
+                        log_action(session_id, "Login/signup wall detected. Pausing for manual sign-in...")
+
+                        screenshot_path, b64 = highlight_element_and_screenshot(page, page.query_selector("body"), audit_dir, f"login_wall_step{step}")
+                        if screenshot_path:
+                            screenshots.append(screenshot_path)
+
+                        paused_info = {
+                            "label": "LinkedIn Sign-In / Authentication Required",
+                            "field_type": "text",
+                            "screenshot_b64": b64,
+                            "options": [],
+                            "selector": "linkedin_login"
+                        }
+
+                        with ACTIVE_SESSIONS_LOCK:
+                            ACTIVE_SESSIONS[session_id]["status"] = "paused"
+                            ACTIVE_SESSIONS[session_id]["paused_field"] = paused_info
+                            ACTIVE_SESSIONS[session_id]["last_action"] = "Paused: Sign in to LinkedIn in Chromium window to proceed."
+
+                        save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
+                        inject_overlay(page, "👉 Please sign in to LinkedIn in the Chromium window, then click Resume → below.", step, TOTAL_STEPS)
+
+                        while True:
+                            time.sleep(1.0)
+                            page = get_active_page(context, page)
+                            if not page:
+                                log_action(session_id, "Browser closed by user during login wall pause.")
+                                with ACTIVE_SESSIONS_LOCK:
+                                    ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                                    ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                                save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                                return
+
+                            with ACTIVE_SESSIONS_LOCK:
+                                st = ACTIVE_SESSIONS[session_id]["status"]
+                            if st in ("running", "cancelled", "completed"):
+                                break
+                            if st == "stopped":
+                                try:
+                                    context.close()
+                                except Exception as e:
+                                    print(f"[guided_applier] Note closing context on login wall stop: {e}")
+                                    pass
+                                return
+
+                    # Check CAPTCHA (excluding Google Sign-in / GSI widgets)
+                    captcha_el = None
+                    try:
+                        captcha_el = page.query_selector(
+                            "iframe[src*='recaptcha/api2']:not([src*='accounts.google.com']), "
+                            "iframe[src*='hcaptcha']:not([src*='accounts.google.com']), "
+                            "div.g-recaptcha:not([class*='gsi']), "
+                            "div.h-captcha"
+                        )
+                    except Exception as c_err:
+                        if is_target_closed_error(c_err):
+                            page = get_active_page(context, page)
+                            if not page: return
+
                     if captcha_el and captcha_el.is_visible():
                         screenshot_path, b64 = highlight_element_and_screenshot(page, captcha_el, audit_dir, f"captcha_step{step}")
-                        screenshots.append(screenshot_path)
+                        if screenshot_path:
+                            screenshots.append(screenshot_path)
 
                         paused_info = {
                             "label": "CAPTCHA Verification Detected",
@@ -954,34 +1376,73 @@ def run_guided_apply_session(
                             ACTIVE_SESSIONS[session_id]["paused_field"] = paused_info
                             ACTIVE_SESSIONS[session_id]["last_action"] = "Paused: CAPTCHA detected. User intervention required."
 
-                        save_session(company, portal_url, step, 4, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
-                        inject_overlay(page, "⚠️ CAPTCHA detected! Please solve it in browser & click Resume in app.", step, 4)
+                        save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
+                        inject_overlay(page, "⚠️ CAPTCHA detected! Please solve it in browser & click Resume in app.", step, TOTAL_STEPS)
 
                         # Wait for user to solve CAPTCHA and click Resume in UI
                         while True:
                             time.sleep(1.0)
+                            page = get_active_page(context, page)
+                            if not page:
+                                log_action(session_id, "Browser closed by user during CAPTCHA pause.")
+                                with ACTIVE_SESSIONS_LOCK:
+                                    ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                                    ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                                save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                                return
+
                             with ACTIVE_SESSIONS_LOCK:
                                 st = ACTIVE_SESSIONS[session_id]["status"]
                             if st in ("running", "cancelled", "completed"):
                                 break
                             if st == "stopped":
-                                context.close()
+                                try:
+                                    context.close()
+                                except Exception as e:
+                                    print(f"[guided_applier] Note closing context on CAPTCHA stop: {e}")
+                                    pass
                                 return
 
                     # Handle File Upload on this step if present
-                    file_input = page.query_selector("input[type='file']")
-                    if file_input and os.path.exists(pdf_path):
-                        try:
-                            file_input.set_input_files(os.path.abspath(pdf_path))
-                            filled_fields["Resume / CV Upload"] = os.path.basename(pdf_path)
-                            time.sleep(2.0)
-                        except Exception as fu_err:
-                            print(f"[guided_applier] File upload warning: {fu_err}")
+                    page = get_active_page(context, page)
+                    if not page: return
+
+                    try:
+                        file_input = page.query_selector("input[type='file']")
+                        if file_input and os.path.exists(pdf_path):
+                            try:
+                                file_input.set_input_files(os.path.abspath(pdf_path))
+                                filled_fields["Resume / CV Upload"] = os.path.basename(pdf_path)
+                                time.sleep(2.0)
+                            except Exception as fu_err:
+                                log_action(session_id, f"File upload warning: {fu_err}")
+                    except Exception as f_err:
+                        if is_target_closed_error(f_err):
+                            page = get_active_page(context, page)
+                            if not page: return
 
                     # Scan form inputs on page
-                    inputs = page.query_selector_all("input:not([type='hidden']):not([type='submit']), select, textarea")
+                    inputs = []
+                    try:
+                        inputs = page.query_selector_all("input:not([type='hidden']):not([type='submit']), select, textarea")
+                    except Exception as in_err:
+                        if is_target_closed_error(in_err):
+                            page = get_active_page(context, page)
+                            if not page: return
+
+                    log_action(session_id, f"Found {len(inputs)} form input fields on step {step}.")
+
                     for el in inputs:
-                        if not el.is_visible():
+                        page = get_active_page(context, page)
+                        if not page: return
+
+                        try:
+                            if not el.is_visible():
+                                continue
+                        except Exception as vis_err:
+                            if is_target_closed_error(vis_err):
+                                page = get_active_page(context, page)
+                                if not page: return
                             continue
 
                         label = extract_field_label(el)
@@ -996,12 +1457,28 @@ def run_guided_apply_session(
                         if label in filled_fields and filled_fields[label]:
                             continue
 
+                        # Evaluate tag name and inspect existing value cleanly
                         try:
-                            curr_val = el.input_value() if el.tag_name in ("input", "textarea") else ""
-                            if curr_val and len(curr_val) > 0:
+                            tag = el.evaluate("el => el.tagName.toLowerCase()")
+                            el_type = (el.get_attribute("type") or "").lower()
+                            if tag in ("input", "textarea", "select"):
+                                try:
+                                    curr_val = el.input_value()
+                                except Exception as ve:
+                                    curr_val = ""
+                                    log_action(session_id, f"Could not inspect value for '{label}': {ve}")
+                            else:
+                                curr_val = ""
+
+                            if curr_val and len(curr_val.strip()) > 0:
+                                log_action(session_id, f"Field '{label}' already filled with: '{curr_val}'")
                                 continue
-                        except Exception:
-                            pass
+                        except Exception as tag_err:
+                            log_action(session_id, f"Tag evaluation error on '{label}': {tag_err}")
+                            tag = "input"
+                            el_type = "text"
+
+                        log_action(session_id, f"Field detected: label={label!r}, tag={tag!r}, type={el_type!r}")
 
                         # 1. Try fuzzy lookup in answers memory
                         ans, score = fuzzy_lookup(label, memory)
@@ -1009,29 +1486,44 @@ def run_guided_apply_session(
                         # 2. Try CV heuristics if memory lookup failed
                         if not ans:
                             ans = derive_from_cv_heuristics(label, cv_data)
+                            score = 0.9 if ans else 0.0
 
                         if ans:
-                            # Fill field robustly with reactive event dispatches
+                            log_action(session_id, f"Match for {label!r}: answer={ans!r}, score={score:.3f}")
                             fill_element_robustly(el, ans)
                             filled_fields[label] = ans
-                            memory[normalize_label(label)] = str(ans)
-                            save_answers_memory(memory)
+
+                            # Don't persist workday password to answers_memory.json
+                            if normalize_label(label) != "workday_password":
+                                memory[normalize_label(label)] = str(ans)
+                                save_answers_memory(memory)
+
+                            try:
+                                actual = el.input_value() if tag in ("input", "textarea", "select") else "<selected>"
+                            except Exception as e:
+                                print(f"[guided_applier] Note reading actual filled value: {e}")
+                                actual = "<unreadable>"
+                            log_action(session_id, f"Filled {label!r}: requested={ans!r}, actual={actual!r}")
                             time.sleep(0.4)
 
                         else:
                             # Pause on unknown field!
                             screenshot_path, b64 = highlight_element_and_screenshot(page, el, audit_dir, f"pause_step{step}_{len(filled_fields)}")
-                            screenshots.append(screenshot_path)
+                            if screenshot_path:
+                                screenshots.append(screenshot_path)
 
-                            # Determine options for select / radio
                             options = []
-                            if el.evaluate("el => el.tagName.toLowerCase()") == "select":
-                                opts = el.query_selector_all("option")
-                                options = [o.inner_text().strip() for o in opts if o.inner_text().strip()]
+                            try:
+                                if tag == "select":
+                                    opts = el.query_selector_all("option")
+                                    options = [o.inner_text().strip() for o in opts if o.inner_text().strip()]
+                            except Exception as e:
+                                print(f"[guided_applier] Note querying select options on pause: {e}")
+                                pass
 
                             paused_info = {
                                 "label": label,
-                                "field_type": el.get_attribute("type") or el.evaluate("el => el.tagName.toLowerCase()"),
+                                "field_type": el_type,
                                 "screenshot_b64": b64,
                                 "options": options,
                                 "selector": label
@@ -1042,77 +1534,154 @@ def run_guided_apply_session(
                                 ACTIVE_SESSIONS[session_id]["paused_field"] = paused_info
                                 ACTIVE_SESSIONS[session_id]["last_action"] = f"Paused on field: '{label}'"
 
-                            save_session(company, portal_url, step, 4, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
-                            inject_overlay(page, f"Paused on: '{label}'. Please answer in main console.", step, 4)
+                            save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "paused", paused_field=paused_info, session_id=session_id)
+                            inject_overlay(page, f"Paused on: '{label}'. Please answer in main console.", step, TOTAL_STEPS)
 
                             # Wait for user answer via POST /api/answer-field
                             while True:
                                 time.sleep(1.0)
+                                page = get_active_page(context, page)
+                                if not page:
+                                    log_action(session_id, f"Browser closed by user while paused on '{label}'.")
+                                    with ACTIVE_SESSIONS_LOCK:
+                                        ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                                        ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+                                    save_session(company, portal_url, step, TOTAL_STEPS, filled_fields, "stopped", session_id=session_id)
+                                    return
+
                                 with ACTIVE_SESSIONS_LOCK:
                                     st = ACTIVE_SESSIONS[session_id]["status"]
                                     user_ans = ACTIVE_SESSIONS[session_id].get("latest_user_answer")
 
                                 if user_ans and st == "running":
-                                    # Inject user provided answer robustly
                                     try:
                                         fill_element_robustly(el, user_ans)
                                         filled_fields[label] = user_ans
-                                        if ACTIVE_SESSIONS[session_id].get("remember_answer", True):
+                                        if ACTIVE_SESSIONS[session_id].get("remember_answer", True) and normalize_label(label) != "workday_password":
                                             memory[normalize_label(label)] = user_ans
                                             save_answers_memory(memory)
                                     except Exception as inject_err:
-                                        print(f"[guided_applier] Error injecting answer: {inject_err}")
+                                        log_action(session_id, f"Error injecting answer: {inject_err}")
 
-                                    # Clear latest answer flag
                                     with ACTIVE_SESSIONS_LOCK:
                                         ACTIVE_SESSIONS[session_id]["latest_user_answer"] = None
                                         ACTIVE_SESSIONS[session_id]["paused_field"] = None
                                     break
 
                                 if st in ("cancelled", "stopped"):
-                                    context.close()
+                                    try:
+                                        context.close()
+                                    except Exception as e:
+                                        print(f"[guided_applier] Note closing context on pause cancellation: {e}")
+                                        pass
                                     return
 
                     # Take step completion screenshot
-                    p_path = os.path.join(audit_dir, f"step_{step}_complete.png")
-                    page.screenshot(path=p_path, full_page=False)
-                    screenshots.append(p_path)
+                    page = get_active_page(context, page)
+                    if not page: return
 
-                    # Look for Next / Submit / Continue button
-                    next_btn = page.query_selector(
-                        "button[data-automation-id='bottom-navigation-next-button'], "
-                        "button:has-text('Next'), button:has-text('Continue'), "
-                        "button:has-text('Submit'), input[type='submit']"
-                    )
+                    try:
+                        p_path = os.path.join(audit_dir, f"step_{step}_complete.png")
+                        page.screenshot(path=p_path, full_page=False)
+                        screenshots.append(p_path)
+                    except Exception as e:
+                        print(f"[guided_applier] Note taking step complete screenshot: {e}")
+                        pass
+
+                    # Targeted Next / Submit / Continue button selector
+                    next_btn = None
+                    try:
+                        next_btn = page.query_selector(
+                            "button[data-automation-id='bottom-navigation-next-button'], "
+                            "button[type='submit']:has-text('Submit'), "
+                            "button:has-text('Submit Application'), "
+                            "button:has-text('Next Step'), "
+                            "button:has-text('Continue'), "
+                            "input[type='submit'][value*='Submit']"
+                        )
+                    except Exception as nb_err:
+                        if is_target_closed_error(nb_err):
+                            page = get_active_page(context, page)
+                            if not page: return
 
                     if next_btn and next_btn.is_visible():
-                        inject_overlay(page, f"Advancing step {step}...", step, 4)
-                        next_btn.click()
-                        time.sleep(2.5)
+                        log_action(session_id, f"Clicking Next/Submit button on step {step}...")
+                        inject_overlay(page, f"Advancing step {step}...", step, TOTAL_STEPS)
+                        old_url = page.url
+                        try:
+                            next_btn.click()
+                        except Exception as n_err:
+                            if is_target_closed_error(n_err):
+                                page = get_active_page(context, page)
+                                if not page: return
+
+                        # Robust SPA wait: wait for URL change or DOM load state
+                        try:
+                            page.wait_for_function("old => location.href !== old", old_url, timeout=4000)
+                        except Exception as e:
+                            print(f"[guided_applier] Note waiting for URL change after step submission: {e}")
+                            pass
+                        try:
+                            page.wait_for_load_state("domcontentloaded", timeout=4000)
+                        except Exception as e:
+                            print(f"[guided_applier] Note waiting for domcontentloaded after step submission: {e}")
+                            pass
+                        time.sleep(1.5)
                     else:
-                        print(f"[guided_applier] No more Next buttons visible on step {step}.")
+                        log_action(session_id, f"No more Next/Submit buttons found on step {step}. Form scanning complete.")
                         break
 
-                # Application finished
+                # Application finished / Ready for user review
+                log_action(session_id, "Form scanning and autofill completed! Visible browser window remains open for user review.")
                 with ACTIVE_SESSIONS_LOCK:
                     ACTIVE_SESSIONS[session_id]["status"] = "completed"
-                    ACTIVE_SESSIONS[session_id]["last_action"] = "Application process completed!"
+                    ACTIVE_SESSIONS[session_id]["last_action"] = "Completed! Review application in Chromium browser window."
 
-                save_session(company, portal_url, 4, 4, filled_fields, "completed", session_id=session_id)
-                inject_overlay(page, "🎉 Application Completed! You may review & close.", 4, 4)
-                time.sleep(5.0)
+                save_session(company, portal_url, TOTAL_STEPS, TOTAL_STEPS, filled_fields, "completed", session_id=session_id)
+                page = get_active_page(context, page)
+                if page:
+                    inject_overlay(page, "🎉 Form filled! Review in Chromium before final submit.", TOTAL_STEPS, TOTAL_STEPS)
+
+                # Keep browser window open until user closes browser or stops session via UI
+                while True:
+                    time.sleep(1.0)
+                    page = get_active_page(context, page)
+                    if not page:
+                        log_action(session_id, "Browser window closed by user after review.")
+                        break
+                    with ACTIVE_SESSIONS_LOCK:
+                        st = ACTIVE_SESSIONS[session_id].get("status")
+                    if st == "stopped":
+                        log_action(session_id, "Session closed via UI. Closing browser window...")
+                        try:
+                            context.close()
+                        except Exception as e:
+                            print(f"[guided_applier] Note closing context on review stopped: {e}")
+                            pass
+                        break
 
             finally:
-                context.close()
+                try:
+                    context.close()
+                except Exception as e:
+                    print(f"[guided_applier] Note closing context in finally block: {e}")
+                    pass
 
     except Exception as err:
-        import traceback
-        err_msg = f"{err}\n{traceback.format_exc()}"
-        print(f"[guided_applier] Error in guided apply session: {err_msg}")
-        with ACTIVE_SESSIONS_LOCK:
-            ACTIVE_SESSIONS[session_id]["status"] = "failed"
-            ACTIVE_SESSIONS[session_id]["last_action"] = f"Error: {err}"
-        save_session(company, portal_url, 1, 4, filled_fields, "failed", session_id=session_id)
+        if is_target_closed_error(err):
+            log_action(session_id, f"Session ended cleanly (browser window or page was closed): {err}")
+            with ACTIVE_SESSIONS_LOCK:
+                ACTIVE_SESSIONS[session_id]["status"] = "stopped"
+                ACTIVE_SESSIONS[session_id]["last_action"] = "Browser window closed by user."
+            save_session(company, portal_url, 1, 4, filled_fields, "stopped", session_id=session_id)
+        else:
+            import traceback
+            err_msg = f"{err}\n{traceback.format_exc()}"
+            log_action(session_id, f"Error in guided apply session: {err_msg}")
+            with ACTIVE_SESSIONS_LOCK:
+                ACTIVE_SESSIONS[session_id]["status"] = "failed"
+                ACTIVE_SESSIONS[session_id]["last_action"] = f"Error: {err}"
+            save_session(company, portal_url, 1, 4, filled_fields, "failed", session_id=session_id)
 
 
 def start_guided_apply(
@@ -1132,7 +1701,8 @@ def start_guided_apply(
         if sys.platform == "win32":
             try:
                 asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            except Exception:
+            except Exception as e:
+                print(f"[guided_applier] Could not set WindowsProactorEventLoopPolicy: {e}")
                 pass
         run_guided_apply_session(session_id, portal_url, cv_data, pdf_path, company, li_at)
 

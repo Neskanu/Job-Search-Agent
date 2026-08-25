@@ -100,7 +100,8 @@ def parse_llm_json(response_text: str) -> Dict[str, Any]:
         if match:
             try:
                 return json.loads(match.group(0))
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as nested_err:
+                print(f"[tailorer] Failed to parse regex-extracted JSON block: {nested_err}")
                 pass
         raise ValueError(f"Failed to parse LLM response as JSON. Raw response: {response_text}\nError: {e}")
 

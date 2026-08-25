@@ -22,7 +22,8 @@ async def run_cv_tailoring_pipeline(
     provider: str,
     llm_config: Dict[str, Any],
     output_dir: str = "data/tailored_cvs",
-    additional_info: Optional[str] = None
+    additional_info: Optional[str] = None,
+    pdf_engine: str = "html"
 ) -> Tuple[Dict[str, Any], str, str]:
     """
     Asynchronously orchestrate the CV tailoring pipeline:
@@ -66,6 +67,6 @@ async def run_cv_tailoring_pipeline(
     
     # Run the DOCX and PDF compiling scripts in thread executors to keep server free
     await asyncio.to_thread(save_cv_as_docx, tailored_cv_data, docx_path)
-    await asyncio.to_thread(save_cv_as_pdf, tailored_cv_data, pdf_path)
+    await asyncio.to_thread(save_cv_as_pdf, tailored_cv_data, pdf_path, "creative", None, "short", "│", "2col", pdf_engine)
     
     return tailored_cv_data, docx_path, pdf_path
