@@ -15,7 +15,7 @@
   <!-- Google Fonts: Outfit -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=2.5.8">
+  <link rel="stylesheet" href="css/style.css?v=2.5.9">
 </head>
 
 <body class="bg-[#FAFAFB] text-slate-800 antialiased h-screen overflow-hidden flex">
@@ -309,8 +309,14 @@
         class="mb-3 p-3 bg-[#1E293B] rounded-lg border border-[#334155] text-xs text-slate-400 hidden flex items-center justify-between gap-2 flex-wrap">
         <div>Selected Job: <strong class="text-rose-400" id="banner-job-title">Python Dev</strong> at <span
             class="italic text-slate-300" id="banner-job-company">Inc.</span></div>
-        <span id="banner-easy-apply-badge"
-          class="hidden text-[10px] px-2 py-0.5 rounded-full font-semibold border"></span>
+        <div class="flex items-center gap-1.5">
+          <span id="banner-easy-apply-badge"
+            class="hidden text-[10px] px-2 py-0.5 rounded-full font-semibold border"></span>
+          <button type="button" onclick="triggerGuidedApplyForSelectedJob()"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-2.5 py-1 rounded transition-all cursor-pointer shadow-sm">
+            🌐 Guided Apply
+          </button>
+        </div>
       </div>
       <button type="button" onclick="tailorResume()" id="btn-tailor-cv"
         class="w-full py-3.5 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold text-xs rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
@@ -574,8 +580,14 @@
             <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">🌐 Guided Portal Application</h3>
             <p id="guided-modal-company" class="text-[11px] text-slate-400 mt-0.5">Company Portal</p>
           </div>
-          <button type="button" onclick="closeGuidedApplyModal()"
-            class="text-slate-400 hover:text-slate-200 text-xs font-semibold">Close ✕</button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="stopAndCloseGuidedSession()"
+              class="bg-slate-800 hover:bg-rose-900/50 text-rose-300 border border-rose-800/60 text-[11px] font-semibold px-2.5 py-1 rounded transition-all cursor-pointer">
+              ⏹ Stop Browser
+            </button>
+            <button type="button" onclick="closeGuidedApplyModal()"
+              class="text-slate-400 hover:text-slate-200 text-xs font-semibold px-1">Close ✕</button>
+          </div>
         </div>
 
         <div class="p-5 flex-1 overflow-y-auto space-y-4">
@@ -826,7 +838,7 @@
   </main>
 
   <!-- JS App Handler -->
-  <script src="js/app.js?v=2.5.8"></script>
+  <script src="js/app.js?v=2.5.9"></script>
 </body>
 
 </html>

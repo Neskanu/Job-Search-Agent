@@ -1,7 +1,7 @@
 # Custom overrides for Job Search Agent
 # ====================================
 # Ignore uploaded original CVs (except .gitkeep)
-`1data/original_cv/*
+data/original_cv/*
 !data/original_cv/.gitkeep
 
 # Ignore uploaded scratch files

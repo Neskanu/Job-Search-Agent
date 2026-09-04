@@ -208,4 +208,52 @@ def test_get_active_page():
     assert get_active_page(context_all_closed, page_closed) is None
 
 
+def test_derive_from_cv_heuristics_extended():
+    """Verify extended heuristics for company, role, country, and github."""
+    cv_data = {
+        "name": "Vytautas Jurgaitis",
+        "contact_info": ["vjurgaitis@gmail.com", "+37067302309", "Vilnius, Lithuania", "https://github.com/vjurgaitis"],
+        "sections": [
+            {
+                "title": "Professional Experience",
+                "type": "experience",
+                "content": [
+                    {
+                        "role": "AI Consultant & Enablement Lead",
+                        "company": "Volga Partners",
+                        "period": "2024 - Present"
+                    }
+                ]
+            }
+        ]
+    }
 
+    assert derive_from_cv_heuristics("Current Company", cv_data) == "Volga Partners"
+    assert derive_from_cv_heuristics("Most Recent Employer", cv_data) == "Volga Partners"
+    assert derive_from_cv_heuristics("Current Title", cv_data) == "AI Consultant & Enablement Lead"
+    assert derive_from_cv_heuristics("Country", cv_data) == "Lithuania"
+    assert derive_from_cv_heuristics("GitHub Profile", cv_data) == "https://github.com/vjurgaitis"
+
+
+def test_api_close_guided_session():
+    """Verify POST /api/close-guided-session cleanly updates session status."""
+    from fastapi.testclient import TestClient
+    from src.main import app
+    from src.guided_applier import ACTIVE_SESSIONS, ACTIVE_SESSIONS_LOCK
+
+    client = TestClient(app)
+
+    session_id = "test_close_sess_123"
+    with ACTIVE_SESSIONS_LOCK:
+        ACTIVE_SESSIONS[session_id] = {
+            "session_id": session_id,
+            "status": "running",
+            "last_action": "Processing..."
+        }
+
+    res = client.post(f"/api/close-guided-session?session_id={session_id}")
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+
+    with ACTIVE_SESSIONS_LOCK:
+        assert ACTIVE_SESSIONS[session_id]["status"] == "stopped"
