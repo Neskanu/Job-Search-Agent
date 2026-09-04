@@ -1,0 +1,429 @@
+{
+  "timestamp": 1788513176.8083146,
+  "last_updated": "2026-09-04T09:12:56.808318+00:00",
+  "source": "google_api",
+  "models": [
+    {
+      "id": "gemini-2.5-flash",
+      "name": "models/gemini-2.5-flash",
+      "display_name": "Gemini 2.5 Flash",
+      "description": "Stable version of Gemini 2.5 Flash, our mid-size multimodal model that supports up to 1 million tokens, released in June of 2025.",
+      "is_recommended": true,
+      "category": "Latest & Recommended",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "name": "models/gemini-2.5-pro",
+      "display_name": "Gemini 2.5 Pro",
+      "description": "Stable release (June 17th, 2025) of Gemini 2.5 Pro",
+      "is_recommended": true,
+      "category": "Latest & Recommended",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "name": "models/gemini-3.7-flash",
+      "display_name": "Gemini 3.7 Flash",
+      "description": "Gemini 3.7 Flash",
+      "is_recommended": true,
+      "category": "Latest & Recommended",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.7-pro",
+      "name": "models/gemini-3.7-pro",
+      "display_name": "Gemini 3.7 Pro",
+      "description": "Advanced reasoning, programming, and multimodal processing",
+      "is_recommended": true,
+      "category": "Latest & Recommended"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "name": "models/gemini-3.8-flash",
+      "display_name": "Gemini 3.8 Flash",
+      "description": "Gemini 3.8 Flash",
+      "is_recommended": true,
+      "category": "Latest & Recommended",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.8-pro",
+      "name": "models/gemini-3.8-pro",
+      "display_name": "Gemini 3.8 Pro",
+      "description": "State-of-the-art reasoning, code analysis, and deep comprehension",
+      "is_recommended": true,
+      "category": "Latest & Recommended"
+    },
+    {
+      "id": "gemini-3.0-flash",
+      "name": "models/gemini-3.0-flash",
+      "display_name": "Gemini 3.0 Flash",
+      "description": "Gemini 3.0 generation flash model",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series"
+    },
+    {
+      "id": "gemini-3.0-pro",
+      "name": "models/gemini-3.0-pro",
+      "display_name": "Gemini 3.0 Pro",
+      "description": "Gemini 3.0 generation pro model",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series"
+    },
+    {
+      "id": "gemini-3.1-flash-image",
+      "name": "models/gemini-3.1-flash-image",
+      "display_name": "Nano Banana 2",
+      "description": "Gemini 3.1 Flash Image.",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 65536,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-flash-image-preview",
+      "name": "models/gemini-3.1-flash-image-preview",
+      "display_name": "Nano Banana 2",
+      "description": "Gemini 3.1 Flash Image Preview.",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 65536,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "name": "models/gemini-3.1-flash-lite",
+      "display_name": "Gemini 3.1 Flash Lite",
+      "description": "Gemini 3.1 Flash Lite",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-flash-lite-image",
+      "name": "models/gemini-3.1-flash-lite-image",
+      "display_name": "Nano Banana 2 Lite",
+      "description": "Gemini 3.1 Flash Lite Image.",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 65536,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "name": "models/gemini-3.1-flash-lite-preview",
+      "display_name": "Gemini 3.1 Flash Lite Preview",
+      "description": "Gemini 3.1 Flash Lite Preview",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-flash-tts-preview",
+      "name": "models/gemini-3.1-flash-tts-preview",
+      "display_name": "Gemini 3.1 Flash TTS Preview",
+      "description": "Gemini 3.1 Flash TTS Preview",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 8192,
+      "output_token_limit": 16384
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "name": "models/gemini-3.1-pro-preview",
+      "display_name": "Gemini 3.1 Pro Preview",
+      "description": "Gemini 3.1 Pro Preview",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.1-pro-preview-customtools",
+      "name": "models/gemini-3.1-pro-preview-customtools",
+      "display_name": "Gemini 3.1 Pro Preview Custom Tools",
+      "description": "Gemini 3.1 Pro Preview optimized for custom tool usage",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "name": "models/gemini-3.5-flash",
+      "display_name": "Gemini 3.5 Flash",
+      "description": "Gemini 3.5 Flash",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "name": "models/gemini-3.5-flash-lite",
+      "display_name": "Gemini 3.5 Flash Lite",
+      "description": "Gemini 3.5 Flash Lite",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.5-pro",
+      "name": "models/gemini-3.5-pro",
+      "display_name": "Gemini 3.5 Pro",
+      "description": "Enhanced reasoning and synthesis",
+      "is_recommended": false,
+      "category": "Gemini 3.x Series"
+    },
+    {
+      "id": "gemini-2.5-computer-use-preview-10-2025",
+      "name": "models/gemini-2.5-computer-use-preview-10-2025",
+      "display_name": "Gemini 2.5 Computer Use Preview 10-2025",
+      "description": "Gemini 2.5 Computer Use Preview 10-2025",
+      "is_recommended": false,
+      "category": "Gemini 2.5 Series",
+      "input_token_limit": 131072,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-2.5-flash-image",
+      "name": "models/gemini-2.5-flash-image",
+      "display_name": "Nano Banana",
+      "description": "Gemini 2.5 Flash Preview Image",
+      "is_recommended": false,
+      "category": "Gemini 2.5 Series",
+      "input_token_limit": 32768,
+      "output_token_limit": 32768
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "name": "models/gemini-2.5-flash-lite",
+      "display_name": "Gemini 2.5 Flash-Lite",
+      "description": "Stable version of Gemini 2.5 Flash-Lite, released in July of 2025",
+      "is_recommended": false,
+      "category": "Gemini 2.5 Series",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-2.5-flash-preview-tts",
+      "name": "models/gemini-2.5-flash-preview-tts",
+      "display_name": "Gemini 2.5 Flash Preview TTS",
+      "description": "Gemini 2.5 Flash Preview TTS",
+      "is_recommended": false,
+      "category": "Gemini 2.5 Series",
+      "input_token_limit": 8192,
+      "output_token_limit": 16384
+    },
+    {
+      "id": "gemini-2.5-pro-preview-tts",
+      "name": "models/gemini-2.5-pro-preview-tts",
+      "display_name": "Gemini 2.5 Pro Preview TTS",
+      "description": "Gemini 2.5 Pro Preview TTS",
+      "is_recommended": false,
+      "category": "Gemini 2.5 Series",
+      "input_token_limit": 8192,
+      "output_token_limit": 16384
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "name": "models/gemini-2.0-flash",
+      "display_name": "Gemini 2.0 Flash",
+      "description": "Second generation flash model",
+      "is_recommended": false,
+      "category": "Gemini 2.0 Series"
+    },
+    {
+      "id": "gemini-2.0-flash-lite",
+      "name": "models/gemini-2.0-flash-lite",
+      "display_name": "Gemini 2.0 Flash Lite",
+      "description": "Lightweight second generation model",
+      "is_recommended": false,
+      "category": "Gemini 2.0 Series"
+    },
+    {
+      "id": "gemini-2.0-pro-exp-0205",
+      "name": "models/gemini-2.0-pro-exp-0205",
+      "display_name": "Gemini 2.0 Pro Experimental",
+      "description": "Experimental reasoning model",
+      "is_recommended": false,
+      "category": "Gemini 2.0 Series"
+    },
+    {
+      "id": "gemini-1.5-flash",
+      "name": "models/gemini-1.5-flash",
+      "display_name": "Gemini 1.5 Flash",
+      "description": "First generation fast model with 1M token context",
+      "is_recommended": false,
+      "category": "Gemini 1.5 Legacy"
+    },
+    {
+      "id": "gemini-1.5-pro",
+      "name": "models/gemini-1.5-pro",
+      "display_name": "Gemini 1.5 Pro",
+      "description": "First generation pro model with 2M token context",
+      "is_recommended": false,
+      "category": "Gemini 1.5 Legacy"
+    },
+    {
+      "id": "gemma-2-27b-it",
+      "name": "models/gemma-2-27b-it",
+      "display_name": "Gemma 2 27B",
+      "description": "Second generation open instruction model (27B parameters)",
+      "is_recommended": false,
+      "category": "Gemma Open Models"
+    },
+    {
+      "id": "gemma-2-9b-it",
+      "name": "models/gemma-2-9b-it",
+      "display_name": "Gemma 2 9B",
+      "description": "Second generation high-efficiency open model (9B parameters)",
+      "is_recommended": false,
+      "category": "Gemma Open Models"
+    },
+    {
+      "id": "gemma-3-12b-it",
+      "name": "models/gemma-3-12b-it",
+      "display_name": "Gemma 3 12B",
+      "description": "Third generation compact open instruction model (12B parameters)",
+      "is_recommended": false,
+      "category": "Gemma Open Models"
+    },
+    {
+      "id": "gemma-3-27b-it",
+      "name": "models/gemma-3-27b-it",
+      "display_name": "Gemma 3 27B",
+      "description": "Third generation open instruction model (27B parameters)",
+      "is_recommended": false,
+      "category": "Gemma Open Models"
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "name": "models/gemma-4-26b-a4b-it",
+      "display_name": "Gemma 4 26B A4B IT",
+      "description": "Gemma 4 26B A4B IT",
+      "is_recommended": false,
+      "category": "Gemma Open Models",
+      "input_token_limit": 262144,
+      "output_token_limit": 32768
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "name": "models/gemma-4-31b-it",
+      "display_name": "Gemma 4 31B IT",
+      "description": "Gemma 4 31B IT",
+      "is_recommended": false,
+      "category": "Gemma Open Models",
+      "input_token_limit": 262144,
+      "output_token_limit": 32768
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "name": "models/gemini-3-flash-preview",
+      "display_name": "Gemini 3 Flash Preview",
+      "description": "Gemini 3 Flash Preview",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "name": "models/gemini-3.6-flash",
+      "display_name": "Gemini 3.6 Flash",
+      "description": "Gemini 3.6 Flash",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-flash-latest",
+      "name": "models/gemini-flash-latest",
+      "display_name": "Gemini Flash Latest",
+      "description": "Latest release of Gemini Flash",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-flash-lite-latest",
+      "name": "models/gemini-flash-lite-latest",
+      "display_name": "Gemini Flash-Lite Latest",
+      "description": "Latest release of Gemini Flash-Lite",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-omni-1.1-flash",
+      "name": "models/gemini-omni-1.1-flash",
+      "display_name": "Gemini Omni 1.1 Flash",
+      "description": "Gemini Omni 1.1 Flash ",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 131072,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-omni-flash-preview",
+      "name": "models/gemini-omni-flash-preview",
+      "display_name": "Gemini Omni Flash Preview",
+      "description": "Gemini Omni Flash Preview",
+      "is_recommended": false,
+      "category": "Flash & High-Throughput",
+      "input_token_limit": 131072,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-3-pro-image",
+      "name": "models/gemini-3-pro-image",
+      "display_name": "Nano Banana Pro",
+      "description": "Gemini 3 Pro Image",
+      "is_recommended": false,
+      "category": "Reasoning & Previews",
+      "input_token_limit": 131072,
+      "output_token_limit": 32768
+    },
+    {
+      "id": "gemini-3-pro-image-preview",
+      "name": "models/gemini-3-pro-image-preview",
+      "display_name": "Nano Banana Pro",
+      "description": "Gemini 3 Pro Image Preview",
+      "is_recommended": false,
+      "category": "Reasoning & Previews",
+      "input_token_limit": 131072,
+      "output_token_limit": 32768
+    },
+    {
+      "id": "gemini-pro-latest",
+      "name": "models/gemini-pro-latest",
+      "display_name": "Gemini Pro Latest",
+      "description": "Latest release of Gemini Pro",
+      "is_recommended": false,
+      "category": "Reasoning & Previews",
+      "input_token_limit": 1048576,
+      "output_token_limit": 65536
+    },
+    {
+      "id": "gemini-robotics-er-2-preview",
+      "name": "models/gemini-robotics-er-2-preview",
+      "display_name": "Gemini Robotics-ER 2 Preview",
+      "description": "Gemini Robotics-ER 2 Preview",
+      "is_recommended": false,
+      "category": "Reasoning & Previews",
+      "input_token_limit": 131072,
+      "output_token_limit": 65536
+    }
+  ]
+}

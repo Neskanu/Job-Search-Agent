@@ -100,3 +100,135 @@ def test_docx_pdf_generation(tmp_path):
         save_cv_as_pdf(DUMMY_CV, pdf_fit1, theme="creative", pdf_engine=engine, fit_one_page=True)
         assert os.path.exists(pdf_fit1)
         assert os.path.getsize(pdf_fit1) > 0
+
+def test_multi_paragraph_support(tmp_path):
+    """Verify that multi-paragraph text sections split with double newlines are cleanly formatted in HTML, DOCX, and PDF."""
+    from src.parser import generate_html_for_cv, save_cv_as_pdf_reportlab
+    import docx
+
+    multi_cv = {
+        "name": "Jane Doe",
+        "contact_info": ["jane@example.com"],
+        "sections": [
+            {
+                "title": "Professional Profile",
+                "type": "text",
+                "content": "Paragraph 1: Experienced architect with focus on scalable cloud systems.\n\nParagraph 2: Specialized in distributed microservices, fault tolerance, and observability.\n\nParagraph 3: Passionate mentor and agile evangelist."
+            }
+        ]
+    }
+
+    # 1. HTML generation
+    html_output = generate_html_for_cv(multi_cv)
+    assert '<p class="cv-paragraph-p"' in html_output
+    assert "Paragraph 1:" in html_output
+    assert "Paragraph 2:" in html_output
+    assert "Paragraph 3:" in html_output
+
+    # 2. DOCX generation
+    docx_file = os.path.join(tmp_path, "multi_para.docx")
+    save_cv_as_docx(multi_cv, docx_file)
+    assert os.path.exists(docx_file)
+    doc = docx.Document(docx_file)
+    para_texts = [p.text for p in doc.paragraphs]
+    assert any("Paragraph 1:" in t for t in para_texts)
+    assert any("Paragraph 2:" in t for t in para_texts)
+    assert any("Paragraph 3:" in t for t in para_texts)
+
+    # 3. ReportLab PDF generation
+    rl_file = os.path.join(tmp_path, "multi_para_rl.pdf")
+    save_cv_as_pdf_reportlab(multi_cv, rl_file)
+    assert os.path.exists(rl_file)
+    assert os.path.getsize(rl_file) > 0
+
+    # 4. save_cv_as_pdf (HTML engine)
+    pdf_file = os.path.join(tmp_path, "multi_para_html.pdf")
+    save_cv_as_pdf(multi_cv, pdf_file, pdf_engine="html")
+    assert os.path.exists(pdf_file)
+    assert os.path.getsize(pdf_file) > 0
+
+
+def test_fit_one_page_strictly_single_page(tmp_path):
+    """Verify that fit_one_page=True strictly constrains even long multi-experience CVs into exactly 1 page."""
+    import pypdf
+
+    long_cv = {
+        "name": "Alex Mercer",
+        "contact_info": ["alex@example.com", "+1-555-0199", "Seattle, WA", "linkedin.com/in/alex"],
+        "sections": [
+            {
+                "title": "Summary",
+                "type": "text",
+                "content": "Accomplished engineering lead specializing in high-throughput cloud distributed architectures, Kubernetes clusters, and automated CI/CD microservices."
+            },
+            {
+                "title": "Technical Skills",
+                "type": "list",
+                "content": ["Python", "FastAPI", "Go", "Docker", "Kubernetes", "AWS", "PostgreSQL", "Terraform", "Redis", "Kafka"]
+            },
+            {
+                "title": "Professional Experience",
+                "type": "experience",
+                "content": [
+                    {
+                        "role": "Staff Software Engineer",
+                        "company": "CloudScale Global",
+                        "period": "2021 - Present",
+                        "location": "Seattle, WA",
+                        "bullets": [
+                            "Architected distributed event streaming pipelines handling 25M daily transactions with 99.99% availability.",
+                            "Spearheaded database partitioning across PostgreSQL clusters cutting query latency by 45%.",
+                            "Mentored team of 10 engineers establishing automated testing standards and trunk-based deployment."
+                        ]
+                    },
+                    {
+                        "role": "Senior Cloud Engineer",
+                        "company": "NextGen Systems",
+                        "period": "2018 - 2021",
+                        "location": "San Francisco, CA",
+                        "bullets": [
+                            "Automated AWS multi-region infrastructure provisioning using Terraform and GitHub Actions saving 20 eng-hours/week.",
+                            "Optimized Docker container images reducing deployment bundle sizes by 65% and cold starts by 3x.",
+                            "Integrated real-time Prometheus and Grafana telemetry reducing mean time to detection (MTTD) from 45 min to 4 min."
+                        ]
+                    },
+                    {
+                        "role": "Software Developer",
+                        "company": "DataCore Solutions",
+                        "period": "2015 - 2018",
+                        "location": "San Francisco, CA",
+                        "bullets": [
+                            "Developed high-concurrency RESTful APIs using Python and Redis caching serving 500k active users.",
+                            "Refactored legacy monolithic reporting service into microservices improving report generation speed by 50%."
+                        ]
+                    }
+                ]
+            },
+            {
+                "title": "Education",
+                "type": "education",
+                "content": [
+                    {
+                        "degree": "B.S. in Computer Science",
+                        "institution": "University of Washington",
+                        "period": "2011 - 2015",
+                        "location": "Seattle, WA",
+                        "bullets": ["Graduated Magna Cum Laude", "Dean's Honor List"]
+                    }
+                ]
+            }
+        ]
+    }
+
+    # 1. Without fit_one_page, this 3-job CV spans 2 pages
+    pdf_normal = str(tmp_path / "long_cv_normal.pdf")
+    save_cv_as_pdf(long_cv, pdf_normal, pdf_engine="html", fit_one_page=False)
+    reader_normal = pypdf.PdfReader(pdf_normal)
+    assert len(reader_normal.pages) >= 1
+
+    # 2. With fit_one_page=True, dynamic scaling and validation strictly enforces 1 page
+    pdf_fit1 = str(tmp_path / "long_cv_fit1.pdf")
+    save_cv_as_pdf(long_cv, pdf_fit1, pdf_engine="html", fit_one_page=True)
+    reader_fit1 = pypdf.PdfReader(pdf_fit1)
+    assert len(reader_fit1.pages) == 1, f"Expected 1 page but got {len(reader_fit1.pages)}"
+

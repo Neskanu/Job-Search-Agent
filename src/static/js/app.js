@@ -800,9 +800,24 @@ function renderWYSIWYG(cvData) {
     const selectedLine = document.getElementById("cv-line-style-select")?.value || cvState.lineStyle || "short";
     
     sheet.classList.add(`theme-${selectedTheme}`, `layout-${selectedLayout}`, `line-style-${selectedLine}`);
+    sheet.classList.toggle("fit-one-page", !!cvState.fitOnePage);
+    sheet.classList.remove("hidden");
+    const emptyPlaceholder = document.getElementById("cv-empty-placeholder");
+    if (emptyPlaceholder) emptyPlaceholder.classList.add("hidden");
     cvState.theme = selectedTheme;
     cvState.layoutMode = selectedLayout;
     cvState.lineStyle = selectedLine;
+  }
+
+  const btnFit = document.getElementById("btn-fit-one-page");
+  if (btnFit) {
+    if (cvState.fitOnePage) {
+      btnFit.classList.remove("bg-white", "text-slate-700", "border-slate-200");
+      btnFit.classList.add("bg-teal-700", "text-white", "border-teal-800", "shadow-sm");
+    } else {
+      btnFit.classList.remove("bg-teal-700", "text-white", "border-teal-800", "shadow-sm");
+      btnFit.classList.add("bg-white", "text-slate-700", "border-slate-200");
+    }
   }
 
   if (cvState.customColor) {
@@ -869,23 +884,66 @@ function renderWYSIWYG(cvData) {
       let contentHTML = "";
 
       if (sec.type === "text") {
-        contentHTML = `<div class="sec-content text-xs text-slate-700 leading-relaxed outline-none p-2 border-l-3 rounded-r-md ml-0" contenteditable="true">${sec.content || ""}</div>`;
+        let rawContent = (sec.content || "").toString().trim();
+        let paras = rawContent.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+        if (paras.length === 0 && rawContent.length > 0) {
+          paras = [rawContent];
+        } else if (paras.length === 0) {
+          paras = ["Enter details here."];
+        }
+
+        const parasHTML = paras.map((p, pIdx) => `
+          <div class="cv-paragraph-item relative group/paragraph mb-1.5 p-1 rounded hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors">
+            <div class="flex items-start gap-1">
+              <div class="paragraph-controls flex items-center gap-0.5 pt-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+                <span class="paragraph-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs px-0.5 select-none" title="Drag to reorder paragraph">☰</span>
+                <button type="button" onclick="moveParagraph(this, -1)" class="paragraph-switch-btn" title="Switch / Move up">▲</button>
+                <button type="button" onclick="moveParagraph(this, 1)" class="paragraph-switch-btn" title="Switch / Move down">▼</button>
+              </div>
+              <div contenteditable="true" class="cv-paragraph-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">${p}</div>
+              <button onclick="deleteParagraph(this)" class="opacity-0 group-hover/paragraph:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1" title="Delete paragraph">✕</button>
+            </div>
+          </div>
+        `).join('');
+
+        contentHTML = `
+          <div class="sec-content text-sec border-l-3 pl-2 py-0.5 rounded-r-md ml-0">
+            <div class="paragraphs-container space-y-1">
+              ${parasHTML}
+            </div>
+            <div class="mt-1 flex gap-2">
+              <button onclick="addParagraph(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Paragraph</button>
+            </div>
+          </div>
+        `;
       } 
       else if (sec.type === "list") {
         if (Array.isArray(sec.content)) {
           const listItemsHTML = sec.content.map(skill => `
-            <div class="skill-item-row flex items-center gap-1.5 py-0.5">
+            <div class="skill-item-row flex items-center gap-1.5 py-0.5 group/skill hover:bg-slate-50 rounded px-1 -mx-1">
+              <div class="skill-controls flex items-center gap-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+                <span class="skill-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag to reorder">☰</span>
+                <button type="button" onclick="moveSkillRow(this, -1)" class="skill-switch-btn" title="Switch / Move up">▲</button>
+                <button type="button" onclick="moveSkillRow(this, 1)" class="skill-switch-btn" title="Switch / Move down">▼</button>
+              </div>
               <span class="bullet-marker text-xs font-bold select-none">${cvState.bulletSymbol || '│'}</span>
               <span contenteditable="true" class="skill-chip flex-1 outline-none text-xs font-semibold text-slate-700">${skill}</span>
+              <button onclick="deleteSkillRow(this)" class="opacity-0 group-hover/skill:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1" title="Delete item">✕</button>
             </div>
           `).join('');
-          contentHTML = `<div class="sec-content space-y-1">${listItemsHTML}</div>`;
+          contentHTML = `
+            <div class="sec-content list-sec space-y-1">
+              ${listItemsHTML}
+            </div>
+            <div class="mt-1">
+              <button onclick="addSkillRow(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Item</button>
+            </div>`;
         } else {
           contentHTML = `<div class="sec-content text-xs text-slate-600 font-medium outline-none p-2 ml-0" contenteditable="true">${sec.content || ""}</div>`;
         }
       } 
       else if (sec.type === "experience" || sec.type === "education") {
-        contentHTML = `<div class="sec-content space-y-3">`;
+        contentHTML = `<div class="sec-content exp-sec space-y-3">`;
         if (Array.isArray(sec.content)) {
           sec.content.forEach((item, itemIdx) => {
             const isExp = sec.type === "experience";
@@ -898,35 +956,47 @@ function renderWYSIWYG(cvData) {
             if (Array.isArray(item.bullets)) {
               item.bullets.forEach((bullet, bIdx) => {
                 bulletsHTML += `
-                  <div class="bullet-item flex items-start gap-1.5 group/bullet relative pr-6 my-0.5">
+                  <div class="bullet-item flex items-start gap-1.5 group/bullet relative pr-8 my-1 hover:bg-slate-50/80 rounded px-1 py-0.5 transition-colors">
+                    <div class="bullet-controls flex items-center gap-0.5 pt-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+                      <span class="bullet-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag to reorder / switch paragraph">☰</span>
+                      <button type="button" onclick="moveBullet(this, -1)" class="bullet-switch-btn" title="Switch / Move up">▲</button>
+                      <button type="button" onclick="moveBullet(this, 1)" class="bullet-switch-btn" title="Switch / Move down">▼</button>
+                    </div>
                     <span class="bullet-marker text-xs font-bold select-none pt-0.5">${cvState.bulletSymbol || '│'}</span>
                     <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">${bullet}</span>
-                    <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
+                    <button type="button" onclick="deleteBullet(this)" class="absolute right-1 top-1 opacity-0 group-hover/bullet:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1 rounded transition-opacity" title="Delete paragraph">✕</button>
                   </div>`;
               });
             }
             bulletsHTML += `</div>`;
 
             contentHTML += `
-              <div class="item-block border-l-3 pl-3 py-0.5 mb-2 relative group/item rounded-r-md" data-idx="${itemIdx}">
+              <div class="item-block border-l-3 pl-3 py-1 mb-2.5 relative group/item rounded-r-md" data-idx="${itemIdx}">
                 <div class="item-header flex flex-wrap justify-between items-start gap-1.5 mb-0.5">
-                  <div class="item-titles flex items-baseline gap-1.5 flex-wrap">
+                  <div class="item-titles flex items-center gap-1.5 flex-wrap">
+                    <div class="flex items-center gap-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+                      <span class="item-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag to reorder entry">☰</span>
+                      <button type="button" onclick="moveItemBlock(this, -1)" class="item-switch-btn" title="Switch / Move entry up">▲</button>
+                      <button type="button" onclick="moveItemBlock(this, 1)" class="item-switch-btn" title="Switch / Move entry down">▼</button>
+                    </div>
                     <span contenteditable="true" class="item-title text-xs font-bold text-slate-900 outline-none">${titleVal}</span>
                     ${subTitleVal ? `<span class="item-subtitle-wrapper text-xs inline-flex items-baseline gap-1"><span class="text-slate-400 font-normal">@</span> <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none">${subTitleVal}</span></span>` : `<span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none hidden"></span>`}
                   </div>
-                  ${(period || location) ? `
-                    <div class="item-badge-wrapper">
-                      <div class="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
-                        <span contenteditable="true" class="item-period outline-none">${period}</span>
-                        ${location ? `<span class="text-slate-300">│</span> <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
-                      </div>
-                    </div>` : `<div class="item-badge-wrapper hidden"><span contenteditable="true" class="item-period outline-none hidden"></span><span contenteditable="true" class="item-location outline-none hidden"></span></div>`}
+                  <div class="flex items-center gap-2">
+                    ${(period || location) ? `
+                      <div class="item-badge-wrapper">
+                        <div class="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                          <span contenteditable="true" class="item-period outline-none">${period}</span>
+                          ${location ? `<span class="text-slate-300">│</span> <span contenteditable="true" class="item-location outline-none">${location}</span>` : `<span contenteditable="true" class="item-location outline-none hidden"></span>`}
+                        </div>
+                      </div>` : `<div class="item-badge-wrapper hidden"><span contenteditable="true" class="item-period outline-none hidden"></span><span contenteditable="true" class="item-location outline-none hidden"></span></div>`}
+                  </div>
                 </div>
                 ${bulletsHTML}
                 
                 <div class="flex gap-3 mt-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                  <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
-                  <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
+                  <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Paragraph</button>
+                  <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Entry</button>
                 </div>
               </div>`;
           });
@@ -942,18 +1012,27 @@ function renderWYSIWYG(cvData) {
       }
 
       secEl.innerHTML = `
-        <div class="sec-header">
-          <h2 contenteditable="true" class="sec-title outline-none">${sec.title || "Section"}</h2>
-          <div class="sec-tools">
-            <span class="drag-handle" title="Drag to reorder section">☰</span>
-            <button onclick="deleteSection(this)" class="text-[10px] text-red-500 font-semibold hover:underline">Delete 🗑️</button>
+        <div class="sec-header flex items-center justify-between gap-2">
+          <h2 contenteditable="true" class="sec-title outline-none flex-1">${sec.title || "Section"}</h2>
+          <div class="sec-tools flex items-center gap-1">
+            <div class="flex items-center gap-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+              <span class="drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag section">☰</span>
+              <button type="button" onclick="moveSection(this, -1)" class="sec-switch-btn" title="Move section up">▲</button>
+              <button type="button" onclick="moveSection(this, 1)" class="sec-switch-btn" title="Move section down">▼</button>
+            </div>
+            ${is2Col ? `<button type="button" onclick="toggleSectionColumn(this)" class="sec-col-toggle" title="Switch between Left Sidebar and Main Column">⇄ Col</button>` : ''}
+            <button onclick="deleteSection(this)" class="text-[10px] text-red-500 font-semibold hover:underline px-0.5" title="Delete section">🗑️</button>
           </div>
         </div>
         ${contentHTML}
       `;
 
       if (is2Col && sidebarCol && mainCol) {
-        if (sec.type === "list" || sec.type === "education") {
+        if (sec.column === "sidebar") {
+          sidebarCol.appendChild(secEl);
+        } else if (sec.column === "main") {
+          mainCol.appendChild(secEl);
+        } else if (sec.type === "list" || sec.type === "education") {
           sidebarCol.appendChild(secEl);
         } else {
           mainCol.appendChild(secEl);
@@ -964,12 +1043,8 @@ function renderWYSIWYG(cvData) {
     });
   }
 
-  // Initialize SortableJS for dragging & reordering sections
-  new Sortable(listContainer.querySelector('.cv-2col-main') || listContainer.querySelector('.cv-1col-layout') || listContainer, {
-    handle: '.drag-handle',
-    ghostClass: 'ghost-class',
-    animation: 180
-  });
+  // Initialize SortableJS across all levels: sections, items, paragraphs, bullets, skills
+  initSortables(listContainer);
 }
 
 function getActiveCV() {
@@ -1064,14 +1139,83 @@ function changeCustomColor(color) {
 function addBullet(btn) {
   const container = btn.closest('.item-block').querySelector('.bullets-container') || btn.closest('.item-block').querySelector('ul') || btn.closest('.item-block');
   const div = document.createElement('div');
-  div.className = 'bullet-item flex items-start gap-2 group/bullet relative pr-8 my-1';
+  div.className = 'bullet-item flex items-start gap-1.5 group/bullet relative pr-8 my-1 hover:bg-slate-50/80 rounded px-1 py-0.5 transition-colors';
   div.innerHTML = `
+    <div class="bullet-controls flex items-center gap-0.5 pt-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+      <span class="bullet-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag to reorder / switch paragraph">☰</span>
+      <button type="button" onclick="moveBullet(this, -1)" class="bullet-switch-btn" title="Switch / Move up">▲</button>
+      <button type="button" onclick="moveBullet(this, 1)" class="bullet-switch-btn" title="Switch / Move down">▼</button>
+    </div>
     <span class="bullet-marker text-xs font-bold select-none pt-0.5">${cvState.bulletSymbol || '│'}</span>
-    <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">New bullet point. Click to customize.</span>
-    <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
+    <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">New paragraph. Click to customize.</span>
+    <button type="button" onclick="deleteBullet(this)" class="absolute right-1 top-1 opacity-0 group-hover/bullet:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1 rounded transition-opacity" title="Delete paragraph">✕</button>
   `;
   container.appendChild(div);
+  initSortables(container);
   saveAndCompile();
+}
+
+function moveBullet(btn, direction) {
+  const item = btn.closest('.bullet-item');
+  if (!item) return;
+  const container = item.parentElement;
+  if (!container) return;
+
+  if (direction === -1) {
+    const prev = item.previousElementSibling;
+    if (prev && prev.classList.contains('bullet-item')) {
+      container.insertBefore(item, prev);
+      saveAndCompile();
+    }
+  } else if (direction === 1) {
+    const next = item.nextElementSibling;
+    if (next && next.classList.contains('bullet-item')) {
+      container.insertBefore(next, item);
+      saveAndCompile();
+    }
+  }
+}
+
+function moveParagraph(btn, direction) {
+  const item = btn.closest('.cv-paragraph-item');
+  if (!item) return;
+  const container = item.parentElement;
+  if (!container) return;
+
+  if (direction === -1) {
+    const prev = item.previousElementSibling;
+    if (prev && prev.classList.contains('cv-paragraph-item')) {
+      container.insertBefore(item, prev);
+      saveAndCompile();
+    }
+  } else if (direction === 1) {
+    const next = item.nextElementSibling;
+    if (next && next.classList.contains('cv-paragraph-item')) {
+      container.insertBefore(next, item);
+      saveAndCompile();
+    }
+  }
+}
+
+function moveItemBlock(btn, direction) {
+  const block = btn.closest('.item-block');
+  if (!block) return;
+  const container = block.parentElement;
+  if (!container) return;
+
+  if (direction === -1) {
+    const prev = block.previousElementSibling;
+    if (prev && prev.classList.contains('item-block')) {
+      container.insertBefore(block, prev);
+      saveAndCompile();
+    }
+  } else if (direction === 1) {
+    const next = block.nextElementSibling;
+    if (next && next.classList.contains('item-block')) {
+      container.insertBefore(next, block);
+      saveAndCompile();
+    }
+  }
 }
 
 function deleteBullet(btn) {
@@ -1085,6 +1229,209 @@ function deleteItemBlock(btn) {
     btn.closest('.item-block').remove();
     saveAndCompile();
   }
+}
+
+function addParagraph(btn) {
+  const container = btn.closest('.sec-content')?.querySelector('.paragraphs-container');
+  if (!container) return;
+  const newPara = document.createElement("div");
+  newPara.className = "cv-paragraph-item relative group/paragraph mb-1.5 p-1 rounded hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-colors";
+  newPara.innerHTML = `
+    <div class="flex items-start gap-1">
+      <div class="paragraph-controls flex items-center gap-0.5 pt-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+        <span class="paragraph-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs px-0.5 select-none" title="Drag to reorder paragraph">☰</span>
+        <button type="button" onclick="moveParagraph(this, -1)" class="paragraph-switch-btn" title="Switch / Move up">▲</button>
+        <button type="button" onclick="moveParagraph(this, 1)" class="paragraph-switch-btn" title="Switch / Move down">▼</button>
+      </div>
+      <div contenteditable="true" class="cv-paragraph-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">New paragraph. Click to customize.</div>
+      <button onclick="deleteParagraph(this)" class="opacity-0 group-hover/paragraph:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1" title="Delete paragraph">✕</button>
+    </div>
+  `;
+  container.appendChild(newPara);
+  initSortables(container);
+  saveAndCompile();
+}
+
+function deleteParagraph(btn) {
+  const item = btn.closest('.cv-paragraph-item');
+  if (item) {
+    item.remove();
+    saveAndCompile();
+  }
+}
+
+function addSkillRow(btn) {
+  const listSec = btn.closest('.draggable-section')?.querySelector('.sec-content.list-sec');
+  if (!listSec) return;
+  const newRow = document.createElement("div");
+  newRow.className = "skill-item-row flex items-center gap-1.5 py-0.5 group/skill hover:bg-slate-50 rounded px-1 -mx-1";
+  newRow.innerHTML = `
+    <div class="skill-controls flex items-center gap-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+      <span class="skill-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs select-none" title="Drag to reorder">☰</span>
+      <button type="button" onclick="moveSkillRow(this, -1)" class="skill-switch-btn" title="Switch / Move up">▲</button>
+      <button type="button" onclick="moveSkillRow(this, 1)" class="skill-switch-btn" title="Switch / Move down">▼</button>
+    </div>
+    <span class="bullet-marker text-xs font-bold select-none">${cvState.bulletSymbol || '│'}</span>
+    <span contenteditable="true" class="skill-chip flex-1 outline-none text-xs font-semibold text-slate-700">New Skill / Competency</span>
+    <button onclick="deleteSkillRow(this)" class="opacity-0 group-hover/skill:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1" title="Delete item">✕</button>
+  `;
+  listSec.appendChild(newRow);
+  initSortables(listSec);
+  saveAndCompile();
+}
+
+function moveSkillRow(btn, direction) {
+  const row = btn.closest('.skill-item-row');
+  if (!row) return;
+  const container = row.parentElement;
+  if (!container) return;
+
+  if (direction === -1) {
+    const prev = row.previousElementSibling;
+    if (prev && prev.classList.contains('skill-item-row')) {
+      container.insertBefore(row, prev);
+      saveAndCompile();
+    }
+  } else if (direction === 1) {
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains('skill-item-row')) {
+      container.insertBefore(next, row);
+      saveAndCompile();
+    }
+  }
+}
+
+function moveSection(btn, direction) {
+  const sec = btn.closest('.draggable-section');
+  if (!sec) return;
+  const col = sec.parentElement;
+  if (!col) return;
+
+  if (direction === -1) {
+    const prev = sec.previousElementSibling;
+    if (prev && prev.classList.contains('draggable-section')) {
+      col.insertBefore(sec, prev);
+      saveAndCompile();
+    }
+  } else if (direction === 1) {
+    const next = sec.nextElementSibling;
+    if (next && next.classList.contains('draggable-section')) {
+      col.insertBefore(next, sec);
+      saveAndCompile();
+    }
+  }
+}
+
+function toggleSectionColumn(btn) {
+  const sec = btn.closest('.draggable-section');
+  if (!sec) return;
+  const currentParent = sec.parentElement;
+  if (!currentParent) return;
+
+  const sidebarCol = document.querySelector('.cv-2col-sidebar');
+  const mainCol = document.querySelector('.cv-2col-main');
+  if (!sidebarCol || !mainCol) return;
+
+  if (currentParent.classList.contains('cv-2col-sidebar')) {
+    mainCol.appendChild(sec);
+  } else {
+    sidebarCol.appendChild(sec);
+  }
+  saveAndCompile();
+}
+
+function deleteSkillRow(btn) {
+  const row = btn.closest('.skill-item-row');
+  if (row) {
+    row.remove();
+    saveAndCompile();
+  }
+}
+
+/**
+ * Initialize SortableJS instances across all hierarchical levels:
+ * 1. Sections (within and across columns)
+ * 2. Position/Education Blocks within sections
+ * 3. Text Paragraphs within narrative sections
+ * 4. Bullets within position items
+ * 5. Skill items within list sections
+ */
+function initSortables(root = document) {
+  if (typeof Sortable === "undefined") return;
+
+  // 1. Sections reordering
+  ['.cv-2col-main', '.cv-2col-sidebar', '.cv-1col-layout'].forEach(sel => {
+    const col = root.querySelector ? root.querySelector(sel) : null;
+    if (col && !col._sortableInit) {
+      new Sortable(col, {
+        group: 'cv-sections',
+        handle: '.drag-handle',
+        ghostClass: 'ghost-class',
+        animation: 180,
+        onEnd: () => saveAndCompile()
+      });
+      col._sortableInit = true;
+    }
+  });
+
+  // 2. Experience & Education items/paragraphs reordering
+  const expCols = root.querySelectorAll ? root.querySelectorAll('.sec-content.exp-sec') : [];
+  expCols.forEach(expCol => {
+    if (!expCol._sortableInit) {
+      new Sortable(expCol, {
+        handle: '.item-drag-handle',
+        ghostClass: 'ghost-class',
+        animation: 180,
+        onEnd: () => saveAndCompile()
+      });
+      expCol._sortableInit = true;
+    }
+  });
+
+  // 3. Narrative text section paragraphs reordering
+  const textCols = root.querySelectorAll ? root.querySelectorAll('.paragraphs-container') : [];
+  textCols.forEach(textCol => {
+    if (!textCol._sortableInit) {
+      new Sortable(textCol, {
+        handle: '.paragraph-drag-handle',
+        ghostClass: 'ghost-class',
+        animation: 180,
+        draggable: '.cv-paragraph-item',
+        onEnd: () => saveAndCompile()
+      });
+      textCol._sortableInit = true;
+    }
+  });
+
+  // 4. Bullets reordering within and across blocks
+  const bulletsContainers = root.querySelectorAll ? root.querySelectorAll('.bullets-container') : [];
+  bulletsContainers.forEach(bulletsCol => {
+    if (!bulletsCol._sortableInit) {
+      new Sortable(bulletsCol, {
+        group: 'cv-block-bullets',
+        handle: '.bullet-drag-handle',
+        ghostClass: 'ghost-class',
+        animation: 180,
+        draggable: '.bullet-item',
+        onEnd: () => saveAndCompile()
+      });
+      bulletsCol._sortableInit = true;
+    }
+  });
+
+  // 5. Skills list reordering
+  const listCols = root.querySelectorAll ? root.querySelectorAll('.sec-content.list-sec') : [];
+  listCols.forEach(listCol => {
+    if (!listCol._sortableInit) {
+      new Sortable(listCol, {
+        handle: '.skill-drag-handle',
+        ghostClass: 'ghost-class',
+        animation: 180,
+        onEnd: () => saveAndCompile()
+      });
+      listCol._sortableInit = true;
+    }
+  });
 }
 
 // ==========================================
@@ -1112,8 +1459,13 @@ async function saveAndCompile() {
     let content = null;
 
     if (type === "text") {
-      const contentEl = secEl.querySelector(".sec-content");
-      content = contentEl ? contentEl.innerText.trim() : "";
+      const paraEls = secEl.querySelectorAll(".cv-paragraph-text");
+      if (paraEls.length > 0) {
+        content = Array.from(paraEls).map(p => p.innerText.trim()).filter(p => p.length > 0).join("\n\n");
+      } else {
+        const contentEl = secEl.querySelector(".sec-content");
+        content = contentEl ? contentEl.innerText.trim() : "";
+      }
     } 
     else if (type === "list") {
       const chips = secEl.querySelectorAll(".skill-chip");
@@ -1154,7 +1506,8 @@ async function saveAndCompile() {
       });
     }
 
-    sections.push({ title, type, content });
+    const column = secEl.closest('.cv-2col-sidebar') ? "sidebar" : "main";
+    sections.push({ title, type, content, column });
   });
 
   if (sections.length > 0) {
@@ -1290,6 +1643,11 @@ function addBlockItem(btn, type) {
   newItem.innerHTML = `
     <div class="flex flex-wrap justify-between items-start gap-2 mb-1">
       <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="item-controls flex items-center gap-0.5 select-none shrink-0 bg-slate-100 border border-slate-200 rounded px-1 py-0.5 shadow-2xs">
+          <span class="item-drag-handle cursor-grab text-slate-400 hover:text-slate-700 text-xs px-0.5 select-none" title="Drag to reorder entry">☰</span>
+          <button type="button" onclick="moveItemBlock(this, -1)" class="item-switch-btn" title="Switch / Move entry up">▲</button>
+          <button type="button" onclick="moveItemBlock(this, 1)" class="item-switch-btn" title="Switch / Move entry down">▼</button>
+        </div>
         <span contenteditable="true" class="item-title text-sm font-bold text-slate-900 outline-none">${titleVal}</span>
         <span class="text-slate-400 font-medium text-xs">@</span>
         <span contenteditable="true" class="item-sub-title font-semibold text-slate-700 outline-none">${subTitleVal}</span>
@@ -1302,18 +1660,24 @@ function addBlockItem(btn, type) {
       </div>
     </div>
     <div class="bullets-container space-y-1.5 mt-2">
-      <div class="bullet-item flex items-start gap-2 group/bullet relative pr-8 my-1">
-        <span class="bullet-marker text-xs font-bold select-none pt-0.5">│</span>
+      <div class="bullet-item flex items-start gap-1.5 group/bullet relative pr-8 my-1 hover:bg-slate-50/80 rounded px-1 py-0.5 transition-colors">
+        <div class="bullet-controls flex items-center gap-0.5 pt-0.5 select-none shrink-0">
+          <span class="bullet-drag-handle cursor-grab text-slate-300 hover:text-slate-700 text-xs px-0.5 rounded hover:bg-slate-200 transition-colors" title="Drag to reorder / switch paragraph">☰</span>
+          <button type="button" onclick="moveBullet(this, -1)" class="bullet-switch-btn" title="Switch / Move up">▲</button>
+          <button type="button" onclick="moveBullet(this, 1)" class="bullet-switch-btn" title="Switch / Move down">▼</button>
+        </div>
+        <span class="bullet-marker text-xs font-bold select-none pt-0.5">${cvState.bulletSymbol || '│'}</span>
         <span contenteditable="true" class="bullet-text flex-1 outline-none text-xs text-slate-700 leading-relaxed">Describe your impact or responsibilities.</span>
-        <button onclick="deleteBullet(this)" class="absolute right-0 top-0.5 hidden group-hover/bullet:block text-[10px] text-red-500 font-bold hover:underline">Delete</button>
+        <button type="button" onclick="deleteBullet(this)" class="absolute right-1 top-1 opacity-0 group-hover/bullet:opacity-100 text-[10px] text-red-400 hover:text-red-600 font-semibold px-1 rounded transition-opacity" title="Delete paragraph">✕</button>
       </div>
     </div>
     <div class="flex gap-3 mt-1.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-      <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Bullet</button>
-      <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Block</button>
+      <button onclick="addBullet(this)" class="text-[10px] text-rose-500 font-semibold hover:underline">+ Add Paragraph</button>
+      <button onclick="deleteItemBlock(this)" class="text-[10px] text-red-400 font-semibold hover:underline">🗑️ Delete Entry</button>
     </div>
   `;
   contentDiv.appendChild(newItem);
+  initSortables(contentDiv);
   saveAndCompile();
 }
 
@@ -1475,10 +1839,10 @@ function refreshPDFPreview() {
 function getSelectedModel(provider) {
   const select = document.getElementById(`${provider}-model-select`);
   const custom = document.getElementById(`${provider}-model-custom`);
-  if (!select) return provider === "gemini" ? "gemini-2.5-flash" : "llama3";
+  if (!select) return provider === "gemini" ? "gemini-3.8-flash" : "llama3";
   
   if (select.value === "custom") {
-    return custom ? (custom.value.trim() || (provider === "gemini" ? "gemini-2.5-flash" : "llama3")) : "gemini-2.5-flash";
+    return custom ? (custom.value.trim() || (provider === "gemini" ? "gemini-3.8-flash" : "llama3")) : "gemini-3.8-flash";
   }
   return select.value;
 }
@@ -1519,6 +1883,140 @@ function toggleCustomModelInput(provider) {
     custom.classList.add("hidden");
   }
   saveAppStateToCache();
+}
+
+let geminiKeyDebounceTimer = null;
+
+function onGeminiKeyInput() {
+  saveAppStateToCache();
+  clearTimeout(geminiKeyDebounceTimer);
+  geminiKeyDebounceTimer = setTimeout(() => {
+    const key = document.getElementById("gemini-key")?.value?.trim();
+    if (key && key.length > 10) {
+      fetchGeminiModels(true);
+    }
+  }, 800);
+}
+
+/**
+ * Dynamically fetches the latest Google Gemini models catalog and updates the dropdown.
+ * @param {boolean} forceRefresh - If true, bypasses server cache and forces live query to Google API
+ */
+async function fetchGeminiModels(forceRefresh = false) {
+  const select = document.getElementById("gemini-model-select");
+  const icon = document.getElementById("gemini-refresh-icon");
+  const status = document.getElementById("gemini-models-status");
+  const apiKey = document.getElementById("gemini-key")?.value?.trim() || "";
+
+  if (icon) icon.classList.add("animate-spin");
+  if (status) status.innerText = forceRefresh ? "Refreshing..." : "Checking...";
+
+  try {
+    const res = await fetch("/api/models/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: apiKey || null,
+        force_refresh: !!forceRefresh
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data && data.models && Array.isArray(data.models)) {
+      const currentSelected = select?.value || "gemini-3.8-flash";
+
+      // Group models by category
+      const categories = {};
+      data.models.forEach(m => {
+        const cat = m.category || (m.is_recommended ? "Latest & Recommended" : "All Available Google Models");
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(m);
+      });
+
+      if (select) {
+        select.innerHTML = "";
+
+        // Category order preference
+        const preferredOrder = [
+          "Latest & Recommended",
+          "Gemini 3.8 / 3.7 Series",
+          "Gemini 3.x Series",
+          "Gemini 2.5 Series",
+          "Gemini 2.0 Series",
+          "Gemini 1.5 Legacy",
+          "Gemma Open Models",
+          "Flash & High-Throughput",
+          "Reasoning & Previews",
+          "All Available Google Models"
+        ];
+        const sortedCats = Object.keys(categories).sort((a, b) => {
+          const idxA = preferredOrder.indexOf(a);
+          const idxB = preferredOrder.indexOf(b);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.localeCompare(b);
+        });
+
+        sortedCats.forEach(cat => {
+          const optgroup = document.createElement("optgroup");
+          optgroup.label = cat;
+          categories[cat].forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m.id;
+            const recLabel = m.is_recommended ? " ⭐" : "";
+            opt.innerText = `${m.display_name}${recLabel}`;
+            if (m.description) opt.title = m.description;
+            optgroup.appendChild(opt);
+          });
+          select.appendChild(optgroup);
+        });
+
+        // Add Custom option at bottom
+        const customOpt = document.createElement("option");
+        customOpt.value = "custom";
+        customOpt.innerText = "Custom Model Name...";
+        select.appendChild(customOpt);
+
+        // Restore selection if possible, otherwise default to gemini-3.8-flash
+        const hasOption = Array.from(select.options).some(o => o.value === currentSelected);
+        if (hasOption) {
+          select.value = currentSelected;
+        } else {
+          select.value = "gemini-3.8-flash";
+        }
+        toggleCustomModelInput("gemini");
+      }
+
+      // Update status text
+      if (status) {
+        if (data.source === "google_api") {
+          status.innerText = `Google Live (${data.models.length})`;
+          status.title = `Live models from Google API updated at ${new Date(data.last_updated).toLocaleTimeString()}`;
+        } else if (data.source === "cache") {
+          status.innerText = `Cached (${data.models.length})`;
+          status.title = `Models cached from Google API on ${new Date(data.last_updated).toLocaleDateString()}`;
+        } else {
+          status.innerText = "Standard List";
+          status.title = data.notice || "Default curated model list";
+        }
+      }
+
+      if (forceRefresh) {
+        showToast(data.source === "google_api" ? `Updated ${data.models.length} models from Google!` : `Synced models list (${data.models.length} available)`);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch Gemini models:", err);
+    if (status) status.innerText = "Sync failed";
+    if (forceRefresh) showToast("Could not sync models with Google API", true);
+  } finally {
+    if (icon) icon.classList.remove("animate-spin");
+  }
 }
 
 /**
@@ -1651,6 +2149,7 @@ function loadAppStateFromCache() {
 // Initialize default view mode & load cached state on load
 document.addEventListener("DOMContentLoaded", () => {
   loadAppStateFromCache();
+  fetchGeminiModels(false);
   loadSavedCVList();
   syncCookieFromMemory(); // Pre-fill li_at from server memory if localStorage is empty
   

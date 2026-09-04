@@ -454,16 +454,21 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
         p_line_run.font.color.rgb = line_color
              
         if sec_type == "text":
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(8)
-            p.paragraph_format.left_indent = Pt(0)
-            p.paragraph_format.line_spacing = 1.15
-            run = p.add_run(str(content))
-            run.font.name = font_name
-            run.font.size = body_size
-            run.font.italic = True if theme in ["executive", "academic"] else False
-            run.font.color.rgb = docx.shared.RGBColor(51, 65, 85)
+            text_str = str(content or "").strip()
+            paras = [p.strip() for p in text_str.split("\n\n") if p.strip()]
+            if not paras:
+                paras = [text_str]
+            for p_idx, p_txt in enumerate(paras):
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(2 if p_idx == 0 else 0)
+                p.paragraph_format.space_after = Pt(4 if p_idx < len(paras) - 1 else 8)
+                p.paragraph_format.left_indent = Pt(0)
+                p.paragraph_format.line_spacing = 1.15
+                run = p.add_run(p_txt)
+                run.font.name = font_name
+                run.font.size = body_size
+                run.font.italic = True if theme in ["executive", "academic"] else False
+                run.font.color.rgb = docx.shared.RGBColor(51, 65, 85)
             
         elif sec_type == "list":
             if isinstance(content, list):
@@ -547,11 +552,16 @@ def save_cv_as_docx(cv_data: Dict[str, Any], output_path: str, theme: str = "min
                             brun.font.size = body_size - Pt(1)
                             brun.font.color.rgb = docx.shared.RGBColor(51, 65, 85)
             else:
-                p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(8)
-                run = p.add_run(str(content))
-                run.font.name = font_name
-                run.font.size = body_size
+                raw_fallback = str(content or "").strip()
+                paras = [p.strip() for p in raw_fallback.split("\n\n") if p.strip()]
+                if not paras:
+                    paras = [raw_fallback]
+                for p_idx, p_txt in enumerate(paras):
+                    p = doc.add_paragraph()
+                    p.paragraph_format.space_after = Pt(4 if p_idx < len(paras) - 1 else 8)
+                    run = p.add_run(p_txt)
+                    run.font.name = font_name
+                    run.font.size = body_size
                 
     doc.save(output_path)
 
@@ -606,7 +616,13 @@ def generate_html_for_cv(
         
         content_html = ""
         if sec_type == "text":
-            content_html = f'<div class="sec-content text-sec">{content or ""}</div>'
+            raw_text = str(content or "").strip()
+            paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
+            if len(paragraphs) > 1:
+                p_items = "".join([f'<p class="cv-paragraph-p" style="margin: 0 0 6px 0;">{p}</p>' for p in paragraphs])
+                content_html = f'<div class="sec-content text-sec">{p_items}</div>'
+            else:
+                content_html = f'<div class="sec-content text-sec">{raw_text}</div>'
         elif sec_type == "list":
             if isinstance(content, list):
                 items_html = "".join([
@@ -670,8 +686,8 @@ def generate_html_for_cv(
 
     # Split for 2col vs 1col
     if layout_mode == "2col":
-        left_secs = [s for s in sections if s.get("type") in ["list", "education"]]
-        right_secs = [s for s in sections if s.get("type") not in ["list", "education"]]
+        left_secs = [s for s in sections if s.get("column") == "sidebar" or (not s.get("column") and s.get("type") in ["list", "education"])]
+        right_secs = [s for s in sections if s.get("column") == "main" or (not s.get("column") and s.get("type") not in ["list", "education"])]
         sidebar_html = "".join(render_section(s) for s in left_secs)
         main_html = "".join(render_section(s) for s in right_secs)
         layout_html = f'''
@@ -782,7 +798,7 @@ def generate_html_for_cv(
   }}
   
   .cv-name {{
-    font-size: 23px;
+    font-size: 26px;
     font-weight: 800;
     color: #FFFFFF;
     margin: 0 0 3px 0;
@@ -790,10 +806,10 @@ def generate_html_for_cv(
   }}
   
   .cv-contact {{
-    font-size: 11.2px;
+    font-size: 12px;
     color: rgba(255, 255, 255, 0.95);
     font-weight: 500;
-    line-height: 1.4;
+    line-height: 1.45;
     letter-spacing: 0.01em;
   }}
   
@@ -808,26 +824,26 @@ def generate_html_for_cv(
   .cv-2col-sidebar {{
     background-color: #F8FAFC;
     border-right: 1.5px solid #E2E8F0;
-    padding: 20px 18px;
+    padding: 22px 20px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
     min-height: 100%;
     height: 100%;
   }}
   
   .cv-2col-main {{
-    padding: 20px 28px;
+    padding: 22px 30px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 22px;
   }}
   
   .cv-1col-layout {{
-    padding: 24px 36px;
+    padding: 26px 38px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 22px;
     min-height: calc(297mm - 110px);
     height: 100%;
   }}
@@ -838,13 +854,13 @@ def generate_html_for_cv(
   
   .sec-header {{
     border-bottom: 1.5px solid {accent_color};
-    padding-bottom: 3px;
-    margin-bottom: 7px;
+    padding-bottom: 3.5px;
+    margin-bottom: 8px;
     break-after: avoid;
   }}
   
   .sec-title {{
-    font-size: 11.8px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -882,9 +898,9 @@ def generate_html_for_cv(
   }}
   
   .text-sec {{
-    font-size: 11.2px;
+    font-size: 12px;
     color: #334155;
-    line-height: 1.52;
+    line-height: 1.62;
     letter-spacing: 0.005em;
     margin: 0;
   }}
@@ -893,28 +909,28 @@ def generate_html_for_cv(
     display: flex;
     align-items: flex-start;
     gap: 6px;
-    padding: 2px 0;
+    padding: 2.5px 0;
     break-inside: avoid;
   }}
   
   .bullet-marker {{
     color: {accent_color};
     font-weight: 700;
-    font-size: 11px;
+    font-size: 11.8px;
     flex-shrink: 0;
-    line-height: 1.45;
+    line-height: 1.5;
   }}
   
   .skill-chip {{
-    font-size: 10.8px;
+    font-size: 11.5px;
     font-weight: 600;
     color: #334155;
-    line-height: 1.4;
+    line-height: 1.45;
     letter-spacing: 0.005em;
   }}
   
   .item-block {{
-    margin-bottom: 11px;
+    margin-bottom: 14px;
     break-inside: auto;
   }}
   
@@ -923,7 +939,7 @@ def generate_html_for_cv(
     justify-content: space-between;
     align-items: flex-start;
     gap: 6px;
-    margin-bottom: 3px;
+    margin-bottom: 3.5px;
     flex-wrap: wrap;
     break-after: avoid;
     break-inside: avoid;
@@ -943,24 +959,24 @@ def generate_html_for_cv(
   }}
   
   .item-title {{
-    font-size: 12.2px;
+    font-size: 13.5px;
     font-weight: 700;
     color: #0F172A;
   }}
   
   .item-at {{
-    font-size: 11px;
+    font-size: 12px;
     color: #94A3B8;
   }}
   
   .item-sub-title {{
-    font-size: 11.2px;
+    font-size: 12.2px;
     font-weight: 600;
     color: #334155;
   }}
   
   .item-badge {{
-    font-size: 9.2px;
+    font-size: 10px;
     background-color: #F1F5F9;
     color: #475569;
     padding: 2px 7px;
@@ -991,10 +1007,10 @@ def generate_html_for_cv(
   }}
   
   .bullets-container {{
-    margin-top: 3.5px;
+    margin-top: 5px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
   }}
   
   .bullet-item {{
@@ -1006,35 +1022,36 @@ def generate_html_for_cv(
   }}
   
   .bullet-text {{
-    font-size: 10.9px;
+    font-size: 11.8px;
     color: #334155;
-    line-height: 1.48;
+    line-height: 1.58;
     letter-spacing: 0.005em;
   }}
   
   /* 📄 Fit to 1 Page compact scaling rules */
-  .fit-one-page .cv-header-banner {{ padding: 22px 36px; gap: 20px; }}
-  .fit-one-page .cv-photo-frame {{ width: 64px; height: 64px; }}
-  .fit-one-page .cv-photo-frame-placeholder {{ width: 64px; height: 64px; font-size: 12px; }}
-  .fit-one-page .cv-name {{ font-size: 22.5px; margin: 0 0 3px 0; }}
-  .fit-one-page .cv-contact {{ font-size: 11px; line-height: 1.38; letter-spacing: 0.01em; }}
+  .fit-one-page .cv-header-banner {{ padding: 18px 30px; gap: 18px; }}
+  .fit-one-page .cv-photo-frame {{ width: 60px; height: 60px; }}
+  .fit-one-page .cv-photo-frame-placeholder {{ width: 60px; height: 60px; font-size: 11.5px; }}
+  .fit-one-page .cv-name {{ font-size: 26px; margin: 0 0 3px 0; }}
+  .fit-one-page .cv-contact {{ font-size: 12px; line-height: 1.45; letter-spacing: 0.005em; }}
   .fit-one-page .cv-2col-layout {{ min-height: calc(297mm - 110px); height: 100%; }}
-  .fit-one-page .cv-2col-sidebar {{ padding: 18px 18px; gap: 15px; min-height: 100%; height: 100%; }}
-  .fit-one-page .cv-2col-main {{ padding: 18px 26px; gap: 16px; }}
-  .fit-one-page .sec-header {{ margin-bottom: 6px; padding-bottom: 2.5px; }}
-  .fit-one-page .sec-title {{ font-size: 11.5px; }}
-  .fit-one-page .text-sec {{ font-size: 11px; line-height: 1.5; letter-spacing: 0.005em; }}
-  .fit-one-page .item-block {{ margin-bottom: 10.5px; padding-left: 10px; }}
-  .fit-one-page .item-block::before, .fit-one-page .text-sec::before {{ height: 16px; top: 2px; }}
-  .fit-one-page .item-title {{ font-size: 12px; }}
-  .fit-one-page .item-sub-title {{ font-size: 11px; }}
-  .fit-one-page .item-badge {{ font-size: 9px; padding: 1.5px 6px; }}
-  .fit-one-page .skill-item-row {{ padding: 1.5px 0; gap: 5px; }}
-  .fit-one-page .skill-chip {{ font-size: 10.5px; line-height: 1.35; letter-spacing: 0.005em; }}
-  .fit-one-page .bullet-marker {{ font-size: 10.5px; }}
-  .fit-one-page .bullet-item {{ margin: 0.5px 0; gap: 5px; }}
-  .fit-one-page .bullet-text {{ font-size: 10.8px; line-height: 1.46; letter-spacing: 0.005em; }}
-  .fit-one-page .bullets-container {{ margin-top: 3px; gap: 1.5px; }}
+  .fit-one-page .cv-2col-sidebar {{ padding: 22px 20px; gap: 20px; min-height: 100%; height: 100%; }}
+  .fit-one-page .cv-2col-main {{ padding: 22px 30px; gap: 22px; }}
+  .fit-one-page .cv-1col-layout {{ padding: 26px 38px; gap: 22px; min-height: calc(297mm - 110px); height: 100%; }}
+  .fit-one-page .sec-header {{ margin-bottom: 8px; padding-bottom: 3.5px; }}
+  .fit-one-page .sec-title {{ font-size: 13px; letter-spacing: 0.05em; }}
+  .fit-one-page .text-sec {{ font-size: 12px; line-height: 1.62; letter-spacing: 0.005em; }}
+  .fit-one-page .item-block {{ margin-bottom: 14px; padding-left: 11px; }}
+  .fit-one-page .item-block::before, .fit-one-page .text-sec::before {{ height: 18px; top: 3px; }}
+  .fit-one-page .item-title {{ font-size: 13.5px; font-weight: 700; }}
+  .fit-one-page .item-sub-title {{ font-size: 12.2px; }}
+  .fit-one-page .item-badge {{ font-size: 10px; padding: 2px 7px; }}
+  .fit-one-page .skill-item-row {{ padding: 2.5px 0; gap: 6px; }}
+  .fit-one-page .skill-chip {{ font-size: 11.5px; line-height: 1.45; letter-spacing: 0.005em; }}
+  .fit-one-page .bullet-marker {{ font-size: 11.8px; line-height: 1.5; }}
+  .fit-one-page .bullet-item {{ margin: 1px 0; gap: 6px; }}
+  .fit-one-page .bullet-text {{ font-size: 11.8px; line-height: 1.58; letter-spacing: 0.005em; }}
+  .fit-one-page .bullets-container {{ margin-top: 5px; gap: 3px; }}
 </style>
 </head>
 <body class="theme-{theme} layout-{layout_mode} line-style-{line_style} {fit_class}">
@@ -1078,6 +1095,7 @@ def save_cv_as_pdf_html(
     """
     Render pixel-perfect PDF using headless Chromium via Playwright.
     Matches the interactive HTML preview 100% in fonts, layout, and colors.
+    Guarantees strictly 1-page output when fit_one_page=True via dynamic scaling.
     """
     from playwright.sync_api import sync_playwright
     
@@ -1095,15 +1113,45 @@ def save_cv_as_pdf_html(
     
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 794, "height": 1123})
         page.set_content(html_content, wait_until="networkidle")
+        
+        scale = 1.0
+        if fit_one_page:
+            content_height = page.evaluate("() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, document.querySelector('.cv-page-table')?.scrollHeight || 0)")
+            # Printable A4 height at 96 DPI is ~1122.5px. Target 1115px to account for browser subpixel rounding.
+            target_height = 1115.0
+            if content_height > target_height:
+                scale = max(0.50, min(1.0, target_height / content_height))
+
         page.pdf(
             path=output_path,
             format="A4",
             print_background=True,
             margin={"top": "0px", "bottom": "0px", "left": "0px", "right": "0px"},
-            prefer_css_page_size=True
+            prefer_css_page_size=True,
+            scale=scale
         )
+
+        if fit_one_page:
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(output_path)
+                # If content still overflows onto a second page, decrement scale until strictly 1 page
+                while len(reader.pages) > 1 and scale > 0.45:
+                    scale -= 0.04
+                    page.pdf(
+                        path=output_path,
+                        format="A4",
+                        print_background=True,
+                        margin={"top": "0px", "bottom": "0px", "left": "0px", "right": "0px"},
+                        prefer_css_page_size=True,
+                        scale=scale
+                    )
+                    reader = pypdf.PdfReader(output_path)
+            except Exception as check_err:
+                print(f"[parser] Could not verify 1-page PDF count: {check_err}")
+
         browser.close()
 
 
@@ -1139,32 +1187,32 @@ def save_cv_as_pdf_reportlab(
     font_italic = u_ital
     
     name_font = u_bold
-    name_size = 16 if fit_one_page else 20
-    name_leading = 20 if fit_one_page else 24
+    name_size = 20 if fit_one_page else 24
+    name_leading = 24 if fit_one_page else 28
     name_color = colors.HexColor('#1A1A1A')
     name_align = TA_CENTER
     
     contact_font = u_reg
-    contact_size = 8.5 if fit_one_page else 9.5
-    contact_leading = 11 if fit_one_page else 12
+    contact_size = 9.5 if fit_one_page else 10.5
+    contact_leading = 12 if fit_one_page else 13.5
     contact_color = colors.HexColor('#4A4A4A')
     contact_align = TA_CENTER
     
     heading_font = u_bold
-    heading_size = 10.5 if fit_one_page else 12
-    heading_leading = 12.5 if fit_one_page else 14
+    heading_size = 11.5 if fit_one_page else 13
+    heading_leading = 14 if fit_one_page else 15.5
     heading_color = colors.HexColor('#1A1A1A')
     heading_align = TA_LEFT
     heading_line_color = colors.HexColor('#CCCCCC')
     
     body_font = u_reg
-    body_size = 8.5 if fit_one_page else 10
-    body_leading = 11.5 if fit_one_page else 14
+    body_size = 9.5 if fit_one_page else 10.5
+    body_leading = 13.5 if fit_one_page else 15.0
     body_color = colors.HexColor('#2D2D2D')
     
     bullet_font = u_reg
-    bullet_size = 8.5 if fit_one_page else 9.5
-    bullet_leading = 11.5 if fit_one_page else 13.5
+    bullet_size = 9.2 if fit_one_page else 10.0
+    bullet_leading = 13.0 if fit_one_page else 14.5
     bullet_color = colors.HexColor('#2D2D2D')
     
     if theme == "executive":
@@ -1256,13 +1304,13 @@ def save_cv_as_pdf_reportlab(
         body_font = u_reg
 
     body_font = font_regular
-    body_size = 9.5
-    body_leading = 13.5
+    body_size = 9.5 if fit_one_page else 10.5
+    body_leading = 13.5 if fit_one_page else 15.0
     body_color = colors.HexColor('#334155')
 
     bullet_font = font_regular
-    bullet_size = 9
-    bullet_leading = 13
+    bullet_size = 9.2 if fit_one_page else 10.0
+    bullet_leading = 13.0 if fit_one_page else 14.5
     bullet_color = colors.HexColor('#334155')
 
     # Override colors if custom_color provided
@@ -1282,8 +1330,8 @@ def save_cv_as_pdf_reportlab(
         'CVName',
         parent=styles['Normal'],
         fontName=name_font,
-        fontSize=18,
-        leading=22,
+        fontSize=name_size,
+        leading=name_leading,
         textColor=colors.white,
         alignment=name_align,
         spaceAfter=3
@@ -1433,9 +1481,22 @@ def save_cv_as_pdf_reportlab(
         line_w = 2.5 if line_style in ["short", "full"] else 0
 
         if sec_type == "text":
-            p_text = Paragraph(f"<font size='9' color='#334155'>{str(sec_content)}</font>", ParagraphStyle(f'TextSec_{sec_title}', parent=styles['Normal'], fontName=font_regular, leading=13))
+            raw_text = str(sec_content or "").strip()
+            paras = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
+            if not paras:
+                paras = [raw_text]
+            p_flowables = []
+            for p_idx, p_val in enumerate(paras):
+                p_style = ParagraphStyle(
+                    f'TextSec_{sec_title}_{p_idx}',
+                    parent=styles['Normal'],
+                    fontName=font_regular,
+                    leading=13,
+                    spaceAfter=4 if p_idx < len(paras) - 1 else 0
+                )
+                p_flowables.append(Paragraph(f"<font size='9' color='#334155'>{p_val}</font>", p_style))
             from reportlab.platypus import Table, TableStyle
-            text_table = Table([[p_text]], colWidths=[max_width])
+            text_table = Table([[p_flowables]], colWidths=[max_width])
             t_style = [
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),

@@ -1,0 +1,19 @@
+
+Alex Mercer
+alex.mercer@email.com | (555) 019-9821 | Seattle, WA
+
+Summary
+Senior Cloud Solutions Engineer with 6+ years of experience building resilient backend infrastructure and Python microservices on AWS and Kubernetes.
+
+Technical Skills
+Python, FastAPI, Docker, Kubernetes, AWS, PostgreSQL, Redis, CI/CD, Terraform
+
+Professional Experience
+Senior Infrastructure Engineer | CloudScale Inc. | 2021 - Present | Seattle, WA
+- Designed and operated Kubernetes microservices handling 50k requests per minute with 99.99% uptime.
+- Optimized database query performance on PostgreSQL reducing API p95 response latency by 35%.
+- Automated infrastructure deployment using Terraform and GitHub Actions.
+
+Education
+B.S. Computer Science | University of Washington | 2015 - 2019
+- Graduated Magna Cum Laude.

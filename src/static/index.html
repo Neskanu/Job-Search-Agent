@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>CV Tailor AI - ATS Optimization App</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +15,7 @@
   <!-- Google Fonts: Outfit -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=1.0.3">
+  <link rel="stylesheet" href="css/style.css?v=2.5.8">
 </head>
 
 <body class="bg-[#FAFAFB] text-slate-800 antialiased h-screen overflow-hidden flex">
@@ -52,22 +55,55 @@
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Gemini API Key</label>
               <input type="password" id="gemini-key" name="gemini_key" autocomplete="off" placeholder="Enter Gemini Key"
+                oninput="onGeminiKeyInput()"
                 class="w-full bg-[#1E293B] border border-[#334155] rounded-lg text-slate-200 text-xs p-2 focus:outline-none focus:border-rose-500">
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-300 mb-1">Gemini Model</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-medium text-slate-300">Gemini Model</label>
+                <button type="button" onclick="fetchGeminiModels(true)" id="btn-refresh-gemini-models"
+                  title="Fetch latest models from Google API"
+                  class="text-[10px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors px-1 py-0.5 rounded cursor-pointer">
+                  <span id="gemini-refresh-icon" class="inline-block transition-transform">🔄</span>
+                  <span id="gemini-models-status">Sync with Google</span>
+                </button>
+              </div>
               <select id="gemini-model-select" name="gemini_model" autocomplete="on"
                 class="w-full bg-[#1E293B] border border-[#334155] rounded-lg text-slate-200 text-xs p-2 focus:outline-none focus:border-rose-500"
                 onchange="toggleCustomModelInput('gemini')">
-                <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
-                <option value="gemini-3.0-flash">Gemini 3.0 Flash</option>
-                <option value="gemini-3.0-pro">Gemini 3.0 Pro</option>
-                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Fast & Recommended)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (High Reasoning)</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <optgroup label="Latest & Recommended">
+                  <option value="gemini-3.8-flash" selected>Gemini 3.8 Flash (Latest & Recommended) ⭐</option>
+                  <option value="gemini-3.8-pro">Gemini 3.8 Pro (Advanced Reasoning) ⭐</option>
+                  <option value="gemini-3.7-flash">Gemini 3.7 Flash (Agentic & Multimodal) ⭐</option>
+                  <option value="gemini-3.7-pro">Gemini 3.7 Pro ⭐</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash ⭐</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro ⭐</option>
+                </optgroup>
+                <optgroup label="Gemini 3.x Series">
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                  <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+                  <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
+                  <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                  <option value="gemini-3.0-flash">Gemini 3.0 Flash</option>
+                  <option value="gemini-3.0-pro">Gemini 3.0 Pro</option>
+                </optgroup>
+                <optgroup label="Gemini 2.0 Series">
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                  <option value="gemini-2.0-pro-exp-0205">Gemini 2.0 Pro Experimental</option>
+                </optgroup>
+                <optgroup label="Gemini 1.5 Legacy">
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                </optgroup>
+                <optgroup label="Gemma Open Models">
+                  <option value="gemma-4-31b-it">Gemma 4 31B</option>
+                  <option value="gemma-4-26b-a4b-it">Gemma 4 26B MoE</option>
+                  <option value="gemma-3-27b-it">Gemma 3 27B</option>
+                  <option value="gemma-3-12b-it">Gemma 3 12B</option>
+                  <option value="gemma-2-27b-it">Gemma 2 27B</option>
+                  <option value="gemma-2-9b-it">Gemma 2 9B</option>
+                </optgroup>
                 <option value="custom">Custom Model Name...</option>
               </select>
               <input type="text" id="gemini-model-custom" name="gemini_custom_model" autocomplete="on"
@@ -790,7 +826,7 @@
   </main>
 
   <!-- JS App Handler -->
-  <script src="js/app.js?v=2.4.0"></script>
+  <script src="js/app.js?v=2.5.8"></script>
 </body>
 
 </html>

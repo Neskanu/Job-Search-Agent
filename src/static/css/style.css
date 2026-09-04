@@ -119,32 +119,146 @@ select, input, textarea {
   margin: 0 !important;
 }
 
-/* Drag Handle & Section Toolbar (Hover only, never overlaps text) */
+/* Drag Handle & Section Toolbar (Always clearly visible with smooth hover highlight) */
 .sec-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  opacity: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  opacity: 0.85;
   transition: opacity 0.2s ease;
 }
 
 .draggable-section:hover .sec-tools {
+  opacity: 1 !important;
+}
+
+.drag-handle,
+.item-drag-handle,
+.paragraph-drag-handle,
+.bullet-drag-handle,
+.skill-drag-handle {
+  cursor: grab !important;
+  color: #64748B !important;
+  font-size: 11px !important;
+  padding: 1px 3px !important;
+  border-radius: 3px !important;
+  user-select: none !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.drag-handle:hover,
+.item-drag-handle:hover,
+.paragraph-drag-handle:hover,
+.bullet-drag-handle:hover,
+.skill-drag-handle:hover {
+  background-color: #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+.drag-handle:active,
+.item-drag-handle:active,
+.paragraph-drag-handle:active,
+.bullet-drag-handle:active,
+.skill-drag-handle:active {
+  cursor: grabbing !important;
+}
+
+/* Switch & reorder buttons (▲ / ▼) */
+.sec-switch-btn,
+.item-switch-btn,
+.paragraph-switch-btn,
+.bullet-switch-btn,
+.skill-switch-btn {
+  cursor: pointer !important;
+  color: #334155 !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #CBD5E1 !important;
+  padding: 1px 3px !important;
+  border-radius: 3px !important;
+  line-height: 1 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  user-select: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.15s ease !important;
+}
+
+.sec-switch-btn:hover,
+.item-switch-btn:hover,
+.paragraph-switch-btn:hover,
+.bullet-switch-btn:hover,
+.skill-switch-btn:hover {
+  color: #0F172A !important;
+  background-color: #E2E8F0 !important;
+  border-color: #64748B !important;
+  transform: scale(1.08) !important;
+}
+
+.sec-col-toggle {
+  cursor: pointer !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  color: #0F766E !important;
+  background-color: #F0FDFA !important;
+  border: 1px solid #99F6E4 !important;
+  padding: 1px 5px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.15s ease !important;
+}
+
+.sec-col-toggle:hover {
+  background-color: #CCFBF1 !important;
+  color: #115E59 !important;
+  border-color: #14B8A6 !important;
+}
+
+/* Drag handles & Switch buttons hover behavior:
+   Controls remain hidden by default and only appear when the corresponding text / item / section is hovered */
+.sec-tools,
+.sec-controls,
+.item-controls,
+.paragraph-controls,
+.bullet-controls,
+.skill-controls {
+  display: none !important;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.draggable-section:hover > .sec-header .sec-tools,
+.draggable-section:hover > .sec-header .sec-controls,
+.sec-header:hover .sec-tools,
+.sec-header:hover .sec-controls,
+.group\/section:hover > .sec-header .sec-tools,
+.group\/section:hover > .sec-header .sec-controls,
+.item-header:hover .item-controls,
+.item-block:hover > .item-header .item-controls,
+.item-block:hover > div > div > .item-controls,
+.group\/item:hover > .item-header .item-controls,
+.group\/item:hover > div > div > .item-controls,
+.cv-paragraph-item:hover .paragraph-controls,
+.group\/paragraph:hover .paragraph-controls,
+.bullet-item:hover .bullet-controls,
+.group\/bullet:hover .bullet-controls,
+.skill-item-row:hover .skill-controls,
+.group\/skill:hover .skill-controls {
+  display: inline-flex !important;
   opacity: 1;
 }
 
-.drag-handle {
-  cursor: grab;
-  color: #94A3B8;
-  font-size: 13px;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-.drag-handle:hover {
-  background-color: #E2E8F0;
-  color: #334155;
-}
-.drag-handle:active {
-  cursor: grabbing;
+.bullet-item:hover .bullet-drag-handle,
+.cv-paragraph-item:hover .paragraph-drag-handle,
+.item-block:hover .item-drag-handle,
+.skill-item-row:hover .skill-drag-handle {
+  color: #0F172A !important;
 }
 
 /* Contenteditable box focus borders */
@@ -160,9 +274,10 @@ select, input, textarea {
 
 /* Drag and Drop Ghost Class */
 .ghost-class {
-  opacity: 0.35;
+  opacity: 0.35 !important;
   background-color: #F1F5F9 !important;
   border: 2px dashed #94A3B8 !important;
+  border-radius: 4px;
 }
 
 /* Item block indicators */
@@ -245,9 +360,10 @@ select, input, textarea {
   gap: 2px !important;
 }
 .cv-2col-sidebar .item-titles {
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  gap: 1px !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px !important;
 }
 .cv-2col-sidebar .item-badge-wrapper {
   margin-top: 3px;
@@ -267,24 +383,28 @@ select, input, textarea {
 }
 
 /* 📄 Fit to 1 Page compact scaling rules */
-.fit-one-page .cv-header-banner { padding: 1.35rem 2.25rem !important; gap: 1.25rem !important; }
-.fit-one-page .cv-photo-frame { width: 64px !important; height: 64px !important; }
+.fit-one-page .cv-header-banner { padding: 1.1rem 1.85rem !important; gap: 1.1rem !important; }
+.fit-one-page .cv-photo-frame { width: 60px !important; height: 60px !important; }
+.fit-one-page .cv-name { font-size: 1.6rem !important; margin-bottom: 3px !important; }
+.fit-one-page .cv-contact { font-size: 0.75rem !important; line-height: 1.45 !important; }
 .fit-one-page .cv-2col-layout { min-height: calc(297mm - 110px) !important; height: 100% !important; }
-.fit-one-page .cv-2col-sidebar { padding: 1.15rem 1.15rem !important; gap: 0.95rem !important; min-height: 100% !important; height: 100% !important; }
-.fit-one-page .cv-2col-main { padding: 1.15rem 1.65rem !important; gap: 1rem !important; }
-.fit-one-page .sec-header { margin-bottom: 6px !important; padding-bottom: 2.5px !important; }
-.fit-one-page .sec-title { font-size: 0.76rem !important; letter-spacing: 0.05em !important; }
-.fit-one-page .text-sec { font-size: 0.76rem !important; line-height: 1.52 !important; letter-spacing: 0.005em !important; }
-.fit-one-page .item-block { margin-bottom: 0.65rem !important; padding-left: 0.65rem !important; }
-.fit-one-page .item-block::before, .fit-one-page .sec-content[contenteditable="true"]::before { height: 16px !important; top: 2px !important; }
-.fit-one-page .item-title { font-size: 0.78rem !important; }
-.fit-one-page .item-sub-title { font-size: 0.74rem !important; }
-.fit-one-page .item-badge-wrapper > div { font-size: 0.65rem !important; padding: 1.5px 6px !important; }
-.fit-one-page .skill-item-text { font-size: 0.74rem !important; line-height: 1.35 !important; letter-spacing: 0.005em !important; }
-.fit-one-page .bullet-marker { font-size: 0.72rem !important; }
-.fit-one-page .bullet-item { margin: 0 !important; gap: 5px !important; }
-.fit-one-page .bullet-text { font-size: 0.74rem !important; line-height: 1.48 !important; letter-spacing: 0.005em !important; }
-.fit-one-page .bullets-container { margin-top: 3px !important; gap: 1.5px !important; }
+.fit-one-page .cv-2col-sidebar { padding: 1.35rem 1.25rem !important; gap: 1.25rem !important; min-height: 100% !important; height: 100% !important; }
+.fit-one-page .cv-2col-main { padding: 1.35rem 1.85rem !important; gap: 1.35rem !important; }
+.fit-one-page .cv-1col-layout { padding: 1.6rem 2.4rem !important; gap: 1.35rem !important; min-height: calc(297mm - 110px) !important; height: 100% !important; }
+.fit-one-page .sec-header { margin-bottom: 8px !important; padding-bottom: 3.5px !important; }
+.fit-one-page .sec-title { font-size: 0.81rem !important; letter-spacing: 0.05em !important; }
+.fit-one-page .text-sec { font-size: 0.75rem !important; line-height: 1.62 !important; letter-spacing: 0.005em !important; }
+.fit-one-page .item-block { margin-bottom: 0.85rem !important; padding-left: 0.7rem !important; }
+.fit-one-page .item-block::before, .fit-one-page .sec-content[contenteditable="true"]::before { height: 18px !important; top: 3px !important; }
+.fit-one-page .item-title { font-size: 0.84rem !important; }
+.fit-one-page .item-sub-title { font-size: 0.76rem !important; }
+.fit-one-page .item-badge-wrapper > div { font-size: 0.63rem !important; padding: 2px 6px !important; }
+.fit-one-page .skill-item-row { padding: 2px 0 !important; gap: 6px !important; }
+.fit-one-page .skill-chip { font-size: 0.72rem !important; line-height: 1.45 !important; }
+.fit-one-page .bullet-marker { font-size: 0.74rem !important; }
+.fit-one-page .bullet-item { margin: 1px 0 !important; gap: 6px !important; }
+.fit-one-page .bullet-text { font-size: 0.74rem !important; line-height: 1.58 !important; letter-spacing: 0.005em !important; }
+.fit-one-page .bullets-container { margin-top: 5px !important; gap: 3px !important; }
 
 /* Skills list styling */
 .skill-item-text {

@@ -17,6 +17,7 @@ from src.parser import read_cv, save_cv_as_docx, save_cv_as_pdf, parse_raw_cv_to
 from src.scraper import scrape_job_details, search_linkedin_jobs
 from src.agent import run_cv_tailoring_pipeline, sanitize_filename
 from src.tailorer import generate_cover_letter
+from src.models_manager import get_available_gemini_models
 from src.applier import apply_to_job, apply_job_queue
 from src.guided_applier import (
     load_answers_memory,
@@ -90,6 +91,10 @@ class GenerateDocsRequest(BaseModel):
     pdf_engine: Optional[str] = Field(default="html", description="PDF rendering engine: html, executive, classic")
     fit_one_page: Optional[bool] = Field(default=False, description="Fit CV content on exactly 1 page")
 
+class GeminiModelsRequest(BaseModel):
+    api_key: Optional[str] = Field(default=None, description="Optional Gemini API key to query user's live models catalog")
+    force_refresh: Optional[bool] = Field(default=False, description="Bypass cache and force query to Google API")
+
 # ==========================================
 # 🛠️ API ENDPOINTS
 # ==========================================
@@ -97,6 +102,27 @@ class GenerateDocsRequest(BaseModel):
 # FastAPI Concept: Endpoint handlers are marked as 'async def' so they run on FastAPI's 
 # asynchronous event loop. Any blocking calls (like file saving) are wrapped in 
 # 'asyncio.to_thread' to run them in a separate thread pool so they don't block the server.
+
+@app.get("/api/models/gemini", summary="List available Gemini models from Google")
+async def get_gemini_models_get(
+    api_key: Optional[str] = Query(default=None, description="Gemini API Key"),
+    force_refresh: Optional[bool] = Query(default=False, description="Force fresh fetch from Google API")
+):
+    """
+    Fetch the list of available Gemini models directly from Google or cache.
+    Keeps the list updated and provides structured metadata including recommended models.
+    """
+    return await asyncio.to_thread(get_available_gemini_models, api_key=api_key, force_refresh=force_refresh)
+
+@app.post("/api/models/gemini", summary="List available Gemini models from Google (POST)")
+async def get_gemini_models_post(req: Optional[GeminiModelsRequest] = None):
+    """
+    Fetch the list of available Gemini models directly from Google or cache.
+    Accepts API key in body to avoid exposing sensitive keys in query strings.
+    """
+    api_key = req.api_key if req else None
+    force_refresh = req.force_refresh if req else False
+    return await asyncio.to_thread(get_available_gemini_models, api_key=api_key, force_refresh=force_refresh)
 
 @app.post("/api/upload-cv", summary="Upload original CV")
 async def upload_cv(file: UploadFile = File(...)):
